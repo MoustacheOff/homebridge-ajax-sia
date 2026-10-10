@@ -1,0 +1,161 @@
+{
+  "pluginAlias": "AjaxSia",
+  "pluginType": "platform",
+  "singular": true,
+  "strictValidation": false,
+  "headerDisplay": "Receives events from an Ajax hub over SIA DC-09 and exposes them to HomeKit. In the Ajax app, point **Monitoring station** at this Homebridge server (see the README).",
+  "schema": {
+    "type": "object",
+    "required": ["name", "accountId"],
+    "properties": {
+      "name": {
+        "title": "Name",
+        "type": "string",
+        "default": "Ajax",
+        "description": "Name of the alarm in the Home app."
+      },
+      "accountId": {
+        "title": "Object number",
+        "type": "string",
+        "pattern": "^[0-9A-Fa-f]{3,16}$",
+        "placeholder": "AB12",
+        "description": "The \"Object number\" configured in the hub's Monitoring station settings: 3 to 16 hexadecimal characters."
+      },
+      "port": {
+        "title": "Port",
+        "type": "integer",
+        "default": 7777,
+        "minimum": 1,
+        "maximum": 65535,
+        "description": "Port the plugin listens on. Enter the same one on the hub."
+      },
+      "protocol": {
+        "title": "Transport",
+        "type": "string",
+        "default": "both",
+        "oneOf": [
+          { "title": "TCP and UDP", "enum": ["both"] },
+          { "title": "TCP only", "enum": ["tcp"] },
+          { "title": "UDP only", "enum": ["udp"] }
+        ]
+      },
+      "encryptionKey": {
+        "title": "Encryption key",
+        "type": "string",
+        "description": "Optional. Same key as set on the hub. 16, 24 or 32 characters. When set, unencrypted messages are refused."
+      },
+      "encryptionKeyFormat": {
+        "title": "Key format",
+        "type": "string",
+        "default": "ascii",
+        "oneOf": [
+          { "title": "Text (16, 24 or 32 characters)", "enum": ["ascii"] },
+          { "title": "Hexadecimal (32, 48 or 64 digits)", "enum": ["hex"] }
+        ],
+        "condition": { "functionBody": "return !!model.encryptionKey;" }
+      },
+      "devices": {
+        "title": "Detectors",
+        "type": "array",
+        "description": "Detectors to expose as HomeKit sensors. Trigger a detector once and the Homebridge log tells you its zone number.",
+        "items": {
+          "type": "object",
+          "required": ["zone", "name", "type"],
+          "properties": {
+            "zone": {
+              "title": "Zone",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9999
+            },
+            "name": {
+              "title": "Name",
+              "type": "string"
+            },
+            "type": {
+              "title": "Type",
+              "type": "string",
+              "default": "motion",
+              "oneOf": [
+                { "title": "Motion detector", "enum": ["motion"] },
+                { "title": "Door / window contact", "enum": ["contact"] },
+                { "title": "Smoke detector", "enum": ["smoke"] },
+                { "title": "Leak detector", "enum": ["leak"] },
+                { "title": "Carbon monoxide detector", "enum": ["co"] }
+              ]
+            }
+          }
+        }
+      },
+      "areas": {
+        "title": "Groups",
+        "type": "integer",
+        "default": 1,
+        "minimum": 1,
+        "maximum": 9,
+        "description": "Number of Ajax groups. With more than one, the alarm shows \"Home\" until every group is armed."
+      },
+      "motionResetSeconds": {
+        "title": "Motion reset (seconds)",
+        "type": "integer",
+        "default": 30,
+        "minimum": 1,
+        "maximum": 3600,
+        "description": "Ajax reports a motion once. HomeKit shows it for this long."
+      },
+      "heartbeatTimeoutMinutes": {
+        "title": "Hub silence timeout (minutes)",
+        "type": "integer",
+        "default": 0,
+        "minimum": 0,
+        "maximum": 1440,
+        "description": "Report a fault when the hub sends nothing for this long. Needs \"Periodic test\" enabled on the hub, with a shorter interval. 0 disables."
+      },
+      "maxTimeSkewSeconds": {
+        "title": "Allowed clock difference (seconds)",
+        "type": "integer",
+        "default": 60,
+        "minimum": 0,
+        "maximum": 86400,
+        "description": "Messages carrying a timestamp further from this server's clock are refused. 0 disables the check."
+      },
+      "allowedAddresses": {
+        "title": "Allowed hub addresses",
+        "type": "array",
+        "description": "Optional. Only accept traffic from these IP addresses.",
+        "items": {
+          "type": "string",
+          "format": "ipv4"
+        }
+      },
+      "listenAddress": {
+        "title": "Listen address",
+        "type": "string",
+        "default": "0.0.0.0",
+        "description": "Network interface to bind to."
+      }
+    }
+  },
+  "layout": [
+    "name",
+    "accountId",
+    {
+      "type": "fieldset",
+      "title": "Connection",
+      "items": ["port", "protocol", "encryptionKey", "encryptionKeyFormat"]
+    },
+    {
+      "key": "devices",
+      "type": "array",
+      "buttonText": "Add detector",
+      "items": ["devices[].zone", "devices[].name", "devices[].type"]
+    },
+    {
+      "type": "fieldset",
+      "title": "Advanced",
+      "expandable": true,
+      "expanded": false,
+      "items": ["areas", "motionResetSeconds", "heartbeatTimeoutMinutes", "maxTimeSkewSeconds", "allowedAddresses", "listenAddress"]
+    }
+  ]
+}
