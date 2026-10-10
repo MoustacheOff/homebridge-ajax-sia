@@ -1,0 +1,54 @@
+{
+  "name": "homebridge-ajax-sia",
+  "displayName": "Ajax SIA",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Homebridge plugin exposing an Ajax Systems alarm (Hub 2) to Apple HomeKit, locally, over the SIA DC-09 protocol.",
+  "author": "Gabriel Corral",
+  "license": "MIT",
+  "homepage": "https://github.com/MoustacheOff/homebridge-ajax-sia#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MoustacheOff/homebridge-ajax-sia.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MoustacheOff/homebridge-ajax-sia/issues"
+  },
+  "keywords": [
+    "homebridge-plugin",
+    "homekit",
+    "ajax",
+    "alarm",
+    "security-system",
+    "sia",
+    "dc-09"
+  ],
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "config.schema.json"
+  ],
+  "engines": {
+    "node": "^22.10.0 || ^24.0.0",
+    "homebridge": "^1.8.0 || ^2.0.0"
+  },
+  "scripts": {
+    "build": "rimraf ./dist && tsc -p tsconfig.build.json",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run lint && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@homebridge/hap-nodejs": "2.2.2",
+    "@types/node": "^24.0.0",
+    "eslint": "^10.9.0",
+    "homebridge": "^2.4.0",
+    "rimraf": "^6.1.3",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.0.0"
+  }
+}
