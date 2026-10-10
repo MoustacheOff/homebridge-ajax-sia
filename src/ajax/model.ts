@@ -128,6 +128,20 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
     this.last = this.hub;
   }
 
+  /** Aligns the arming state with one read from elsewhere (the cloud), without touching alarms. */
+  reconcile(arm: ArmState): void {
+    this.armedAreas.clear();
+    this.night = arm === 'night';
+    if (arm === 'away' || arm === 'night') {
+      for (let area = 1; area <= this.areaCount; area++) {
+        this.armedAreas.add(area);
+      }
+    } else if (arm === 'stay') {
+      this.armedAreas.add(1);
+    }
+    this.publishHub();
+  }
+
   /** Mark the hub as silent (or back). Surfaced as a fault. */
   setOffline(offline: boolean): void {
     if (this.offline !== offline) {

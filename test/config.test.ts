@@ -81,3 +81,45 @@ describe('parseConfig', () => {
     expect(errors).toHaveLength(4);
   });
 });
+
+describe('parseConfig cloud', () => {
+  const cloud = { email: 'me@example.com', password: 'hunter2' };
+
+  it('is off by default', () => {
+    expect(parseConfig(valid).config?.cloud).toBeUndefined();
+  });
+
+  it('applies defaults', () => {
+    expect(parseConfig({ ...valid, cloud }).config?.cloud).toEqual({
+      email: 'me@example.com',
+      password: 'hunter2',
+      host: 'mobile-gw.prod.ajax.systems',
+      clientVersion: '3.57',
+      syncIntervalMinutes: 15,
+    });
+  });
+
+  it('keeps the optional settings', () => {
+    const settings = { ...cloud, totpSecret: ' ABC ', spaceName: 'Home', spaceId: 'x', clientVersion: '4.0', syncIntervalMinutes: 0 };
+    expect(parseConfig({ ...valid, cloud: settings }).config?.cloud).toMatchObject({
+      totpSecret: 'ABC', spaceName: 'Home', spaceId: 'x', clientVersion: '4.0', syncIntervalMinutes: 0,
+    });
+  });
+
+  it('can be switched off while keeping the credentials', () => {
+    expect(parseConfig({ ...valid, cloud: { ...cloud, enabled: false } }).config?.cloud).toBeUndefined();
+  });
+
+  it.each([
+    [{ password: 'x' }, 'cloud.email'],
+    [{ email: 'a@b.c' }, 'cloud.password'],
+    [{ ...cloud, syncIntervalMinutes: -1 }, 'syncIntervalMinutes'],
+    [{ ...cloud, totpSecret: 5 }, 'totpSecret'],
+  ])('rejects %j', (settings, field) => {
+    expect(parseConfig({ ...valid, cloud: settings }).errors).toEqual([expect.stringContaining(field)]);
+  });
+
+  it('rejects something that is not an object', () => {
+    expect(parseConfig({ ...valid, cloud: 'yes' }).errors).toEqual([expect.stringContaining('"cloud"')]);
+  });
+});

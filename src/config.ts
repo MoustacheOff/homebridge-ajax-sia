@@ -9,6 +9,17 @@ export interface DeviceConfig {
   type: ZoneType;
 }
 
+export interface CloudConfig {
+  email: string;
+  password: string;
+  totpSecret?: string;
+  spaceId?: string;
+  spaceName?: string;
+  host: string;
+  clientVersion: string;
+  syncIntervalMinutes: number;
+}
+
 export interface Config {
   name: string;
   accountId: string;
@@ -23,6 +34,8 @@ export interface Config {
   maxTimeSkewSeconds: number;
   heartbeatTimeoutMinutes: number;
   allowedAddresses: string[];
+  /** Present only when commands from HomeKit are enabled. */
+  cloud?: CloudConfig;
 }
 
 export type ConfigResult = { config: Config; errors?: undefined } | { config?: undefined; errors: string[] };
@@ -60,6 +73,7 @@ export function parseConfig(raw: Raw): ConfigResult {
   }
 
   const devices = parseDevices(raw.devices ?? [], errors);
+  const cloud = parseCloud(raw.cloud, errors);
 
   const config: Config = {
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : 'Ajax',
@@ -74,6 +88,7 @@ export function parseConfig(raw: Raw): ConfigResult {
     maxTimeSkewSeconds: integer('maxTimeSkewSeconds', 60, 0, 86400),
     heartbeatTimeoutMinutes: integer('heartbeatTimeoutMinutes', 0, 0, 1440),
     allowedAddresses: (allowedAddresses as string[]).map((address) => address.trim()),
+    ...(cloud ? { cloud } : {}),
   };
 
   return errors.length > 0 ? { errors } : { config };
@@ -138,4 +153,65 @@ function parseDevices(value: unknown, errors: string[]): DeviceConfig[] {
   });
 
   return devices;
+}
+
+/** Version of the Ajax Android app announced to the server, known to be accepted at the time of writing. */
+export const DEFAULT_CLIENT_VERSION = '3.57';
+
+function parseCloud(value: unknown, errors: string[]): CloudConfig | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    errors.push('"cloud" must be an object');
+    return undefined;
+  }
+  const raw = value as Raw;
+  if (raw.enabled === false) {
+    return undefined;
+  }
+
+  const text = (field: string): string | undefined => {
+    const entry = raw[field];
+    if (entry === undefined || entry === '') {
+      return undefined;
+    }
+    if (typeof entry !== 'string') {
+      errors.push(`"cloud.${field}" must be a string`);
+      return undefined;
+    }
+    return entry.trim();
+  };
+
+  const email = text('email');
+  const password = typeof raw.password === 'string' && raw.password !== '' ? raw.password : undefined;
+  if (!email) {
+    errors.push('"cloud.email" is required to send commands');
+  }
+  if (!password) {
+    errors.push('"cloud.password" is required to send commands');
+  }
+
+  const syncInterval = raw.syncIntervalMinutes ?? 15;
+  const validInterval = typeof syncInterval === 'number' && Number.isInteger(syncInterval) && syncInterval >= 0 && syncInterval <= 1440;
+  if (!validInterval) {
+    errors.push('"cloud.syncIntervalMinutes" must be an integer between 0 and 1440');
+  }
+
+  const totpSecret = text('totpSecret');
+  const spaceId = text('spaceId');
+  const spaceName = text('spaceName');
+  if (!email || !password) {
+    return undefined;
+  }
+  return {
+    email,
+    password,
+    ...(totpSecret ? { totpSecret } : {}),
+    ...(spaceId ? { spaceId } : {}),
+    ...(spaceName ? { spaceName } : {}),
+    host: text('host') ?? 'mobile-gw.prod.ajax.systems',
+    clientVersion: text('clientVersion') ?? DEFAULT_CLIENT_VERSION,
+    syncIntervalMinutes: validInterval ? (syncInterval as number) : 15,
+  };
 }

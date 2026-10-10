@@ -215,3 +215,30 @@ describe('AjaxModel', () => {
     expect(isZoneCode('CL')).toBe(false);
   });
 });
+
+describe('AjaxModel.reconcile', () => {
+  it.each([
+    ['away', 'away'], ['night', 'night'], ['disarmed', 'disarmed'], ['stay', 'stay'],
+  ] as const)('adopts %s', (arm, expected) => {
+    const model = new AjaxModel(2);
+    model.reconcile(arm);
+    expect(model.hub.arm).toBe(expected);
+  });
+
+  it('replaces what the events had said', () => {
+    const model = new AjaxModel();
+    model.apply({ code: 'NL', area: 1 });
+    model.reconcile('disarmed');
+    expect(model.hub.arm).toBe('disarmed');
+  });
+
+  it('leaves alarms alone and announces the change', () => {
+    const model = new AjaxModel();
+    const seen: string[] = [];
+    model.on('hub', (hub) => seen.push(hub.arm));
+    model.apply({ code: 'BA', zone: 3 });
+    model.reconcile('away');
+    expect(model.hub.alarm).toBe(true);
+    expect(seen.at(-1)).toBe('away');
+  });
+});

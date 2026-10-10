@@ -1,5 +1,8 @@
 import { EventEmitter } from 'node:events';
+import { mkdtempSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import hap from '@homebridge/hap-nodejs';
 import { vi } from 'vitest';
@@ -15,8 +18,10 @@ export function createApi() {
   const unregistered: FakeAccessory[] = [];
 
   const events = new EventEmitter();
+  const storage = mkdtempSync(join(tmpdir(), 'ajax-hb-'));
   const api = Object.assign(events, {
     hap,
+    user: { storagePath: () => storage },
     platformAccessory: FakeAccessory,
     registerPlatformAccessories: (_plugin: string, _platform: string, accessories: FakeAccessory[]) => registered.push(...accessories),
     unregisterPlatformAccessories: (_plugin: string, _platform: string, accessories: FakeAccessory[]) => unregistered.push(...accessories),

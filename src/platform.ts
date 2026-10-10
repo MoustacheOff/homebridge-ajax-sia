@@ -1,14 +1,20 @@
 import type { API, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformConfig } from 'homebridge';
 
-import { HubAccessory, type HubContext } from './accessories/hub.js';
+import { HubAccessory, type Commander, type HubContext } from './accessories/hub.js';
 import { ZoneAccessory, type ZoneContext } from './accessories/zone.js';
 import { AjaxModel, isZoneCode } from './ajax/model.js';
+import { AjaxCloud, sha256 } from './cloud/ajax.js';
+import { CloudController } from './cloud/controller.js';
+import { GrpcChannel } from './cloud/grpc.js';
+import { CloudStore } from './cloud/store.js';
 import { parseConfig, type Config } from './config.js';
 import { SiaReceiver } from './sia/receiver.js';
 import { SiaServer } from './sia/server.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 
 const WATCHDOG_INTERVAL_MS = 15_000;
+/** After a command, check what the hub actually did, in case the SIA event is late or not configured. */
+const VERIFY_DELAY_MS = 6_000;
 
 /**
  * Wires the pieces together: the SIA server feeds the Ajax model, and the model drives HomeKit accessories.
@@ -19,7 +25,10 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
   private readonly zones: ZoneAccessory[] = [];
   private readonly announcedZones = new Set<number>();
   private server?: SiaServer;
+  private hub?: HubAccessory;
   private watchdog?: NodeJS.Timeout;
+  private cloudSync?: NodeJS.Timeout;
+  private verify?: NodeJS.Timeout;
   private lastSeen = Date.now();
 
   constructor(
@@ -47,7 +56,8 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     const config = this.config!;
     const model = new AjaxModel(config.areas);
 
-    this.setupAccessories(config, model);
+    const commander = this.setupCloud(config, model);
+    this.setupAccessories(config, model, commander);
     this.observe(model);
 
     const receiver = new SiaReceiver({
@@ -87,11 +97,77 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
 
   private stop(): void {
     clearInterval(this.watchdog);
+    clearInterval(this.cloudSync);
+    clearTimeout(this.verify);
+    this.hub?.dispose();
     this.zones.forEach((zone) => zone.dispose());
     void this.server?.stop();
   }
 
-  private setupAccessories(config: Config, model: AjaxModel): void {
+  /**
+   * Enables commands from HomeKit when the Ajax account is configured. Returns the function that carries
+   * them out, or `undefined` when the plugin stays receive-only.
+   */
+  private setupCloud(config: Config, model: AjaxModel): Commander | undefined {
+    const settings = config.cloud;
+    if (!settings) {
+      return undefined;
+    }
+
+    const store = new CloudStore(this.api.user.storagePath());
+    // `host` is a plain host name; a full origin (http://...) is only meant for tests.
+    const origin = settings.host.includes('://') ? settings.host : `https://${settings.host}:443`;
+    const client = new AjaxCloud({
+      channel: new GrpcChannel(origin),
+      host: settings.host,
+      port: 443,
+      email: settings.email,
+      passwordHash: sha256(settings.password),
+      ...(settings.totpSecret ? { totpSecret: settings.totpSecret } : {}),
+      deviceId: store.deviceId,
+      clientVersion: settings.clientVersion,
+    });
+    client.restore(store.session);
+    const controller = new CloudController(
+      client,
+      { ...(settings.spaceId ? { spaceId: settings.spaceId } : {}), ...(settings.spaceName ? { spaceName: settings.spaceName } : {}) },
+      this.log,
+    );
+
+    this.log.warn('Commands from HomeKit are enabled. They use the protocol of the Ajax mobile apps, which is not an official API.');
+
+    const sync = async (): Promise<void> => {
+      try {
+        const arm = await controller.read();
+        store.save(client.current);
+        if (arm) {
+          model.reconcile(arm);
+        }
+      } catch (error) {
+        this.log.warn(`Could not read the state from Ajax: ${describe(error)}`);
+      }
+    };
+
+    void sync();
+    if (settings.syncIntervalMinutes > 0) {
+      this.cloudSync = setInterval(() => void sync(), settings.syncIntervalMinutes * 60_000);
+    }
+
+    return async (target, current) => {
+      try {
+        await controller.command(target, current);
+        store.save(client.current);
+      } catch (error) {
+        this.log.error(`Could not ${target === 'disarmed' ? 'disarm' : `arm (${target})`}: ${describe(error)}`);
+        throw error;
+      }
+      this.log.info(`Command sent: ${target}`);
+      clearTimeout(this.verify);
+      this.verify = setTimeout(() => void sync(), VERIFY_DELAY_MS);
+    };
+  }
+
+  private setupAccessories(config: Config, model: AjaxModel, commander?: Commander): void {
     const { hap } = this.api;
     const wanted = new Set<string>();
 
@@ -101,7 +177,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     if (hub.context.arm) {
       model.restore(hub.context.arm);
     }
-    new HubAccessory(this.api, hub, model);
+    this.hub = new HubAccessory(this.api, hub, model, commander);
 
     for (const device of config.devices) {
       const uuid = hap.uuid.generate(`ajax-sia:zone:${config.accountId}:${device.zone}`);
@@ -175,4 +251,8 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     }
     model.setOffline(silent);
   }
+}
+
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

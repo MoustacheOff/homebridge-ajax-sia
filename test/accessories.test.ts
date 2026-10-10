@@ -187,3 +187,91 @@ describe('ZoneAccessory', () => {
     });
   });
 });
+
+describe('HubAccessory with commands', () => {
+  const Target = Characteristic.SecuritySystemTargetState;
+
+  function commandable(commander: (target: string, current: string) => Promise<void>, areas = 1) {
+    const { api, FakeAccessory } = createApi();
+    const model = new AjaxModel(areas);
+    const accessory = new FakeAccessory('Ajax', hap.uuid.generate('hub')) as unknown as PlatformAccessory<HubContext>;
+    accessory.context = { accountId: 'AB12' };
+    const hub = new HubAccessory(api, accessory, model, commander as never);
+    const target = accessory.getService(Service.SecuritySystem)!.getCharacteristic(Target)!;
+    const current = accessory.getService(Service.SecuritySystem)!.getCharacteristic(Characteristic.SecuritySystemCurrentState)!;
+    return { model, hub, target, current };
+  }
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('can be written, and only to the targets Ajax can reach', () => {
+    const { target } = commandable(async () => undefined);
+    expect(target.props.perms).toContain(Perms.PAIRED_WRITE);
+    expect(target.props.validValues).toEqual([Target.AWAY_ARM, Target.NIGHT_ARM, Target.DISARM]);
+  });
+
+  it.each([
+    [Target.AWAY_ARM, 'away'],
+    [Target.NIGHT_ARM, 'night'],
+    [Target.DISARM, 'disarmed'],
+  ])('target %i commands %s, from the state the hub is in', async (value, expected) => {
+    const calls: [string, string][] = [];
+    const { model, target } = commandable(async (command, current) => void calls.push([command, current]));
+    model.apply({ code: 'NL', area: 1 });
+
+    await target.handleSetRequest(value);
+    expect(calls).toEqual([[expected, 'night']]);
+  });
+
+  it('shows the requested target right away, and settles when the hub confirms', async () => {
+    const { model, target, current } = commandable(async () => undefined);
+    await target.handleSetRequest(Target.AWAY_ARM);
+    expect(target.value).toBe(Target.AWAY_ARM);
+    expect(current.value).toBe(Characteristic.SecuritySystemCurrentState.DISARMED);
+
+    model.apply({ code: 'CL', area: 1 });
+    expect(current.value).toBe(Characteristic.SecuritySystemCurrentState.AWAY_ARM);
+    expect(target.value).toBe(Target.AWAY_ARM);
+  });
+
+  it('gives the target back to the real state when the hub never follows', async () => {
+    const { target } = commandable(async () => undefined);
+    await target.handleSetRequest(Target.AWAY_ARM);
+    expect(target.value).toBe(Target.AWAY_ARM);
+
+    vi.advanceTimersByTime(46_000);
+    expect(target.value).toBe(Target.DISARM);
+  });
+
+  it('reports a failed command to HomeKit and restores the target', async () => {
+    const { target } = commandable(async () => {
+      throw new Error('hub busy');
+    });
+
+    await expect(target.handleSetRequest(Target.AWAY_ARM)).rejects.toBeDefined();
+    expect(target.value).toBe(Target.DISARM);
+  });
+
+  it('refuses the "Home" target', async () => {
+    const calls: string[] = [];
+    const { target } = commandable(async (command) => void calls.push(command));
+    await expect(target.handleSetRequest(Target.STAY_ARM)).rejects.toBeDefined();
+    expect(calls).toEqual([]);
+  });
+
+  it('shows a partial arm as Away, which is as close as HomeKit goes', () => {
+    const { model, target, current } = commandable(async () => undefined, 2);
+    model.reconcile('stay');
+    expect(current.value).toBe(Characteristic.SecuritySystemCurrentState.STAY_ARM);
+    expect(target.value).toBe(Target.AWAY_ARM);
+  });
+
+  it('stops its timer when disposed', async () => {
+    const { target, hub } = commandable(async () => undefined);
+    await target.handleSetRequest(Target.AWAY_ARM);
+    hub.dispose();
+    vi.advanceTimersByTime(60_000);
+    expect(target.value).toBe(Target.AWAY_ARM);
+  });
+});

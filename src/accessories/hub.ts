@@ -8,17 +8,29 @@ export type HubContext = {
   arm?: ReturnType<AjaxModel['snapshot']>;
 };
 
+export type Target = 'away' | 'night' | 'disarmed';
+
+/** Carries out a command from HomeKit. Rejects when the system could not be moved. */
+export type Commander = (target: Target, current: ArmState) => Promise<void>;
+
+/** How long the target state may differ from the real one before HomeKit falls back to the real one. */
+const PENDING_TIMEOUT_MS = 45_000;
+
 /** The alarm panel, exposed as a HomeKit security system. */
 export class HubAccessory {
   private readonly service: Service;
   private hub: HubState;
+  private pending?: ArmState;
+  private pendingTimer?: NodeJS.Timeout;
 
+  /** @param commander when given, arming and disarming from HomeKit is enabled; otherwise the tile is read-only. */
   constructor(
     private readonly api: API,
     private readonly accessory: PlatformAccessory<HubContext>,
     private readonly model: AjaxModel,
+    private readonly commander?: Commander,
   ) {
-    const { Service, Characteristic } = api.hap;
+    const { Service, Characteristic, Perms } = api.hap;
 
     accessory.getService(Service.AccessoryInformation)!
       .setCharacteristic(Characteristic.Manufacturer, 'Ajax Systems')
@@ -32,10 +44,19 @@ export class HubAccessory {
 
     this.service.getCharacteristic(Characteristic.SecuritySystemCurrentState)
       .onGet(() => this.currentState());
-    // SIA is receive-only: the hub reports its state, it cannot be commanded. Arming is done from the Ajax app.
-    this.service.getCharacteristic(Characteristic.SecuritySystemTargetState)
-      .setProps({ perms: [api.hap.Perms.PAIRED_READ, api.hap.Perms.NOTIFY] })
-      .onGet(() => this.targetState());
+
+    const target = this.service.getCharacteristic(Characteristic.SecuritySystemTargetState).onGet(() => this.targetState());
+    if (commander) {
+      const { STAY_ARM, AWAY_ARM, NIGHT_ARM, DISARM } = Characteristic.SecuritySystemTargetState;
+      // "Home" has no Ajax equivalent without groups, so it is not offered; it can still be read.
+      target
+        .setProps({ perms: [Perms.PAIRED_READ, Perms.PAIRED_WRITE, Perms.NOTIFY], validValues: [AWAY_ARM, NIGHT_ARM, DISARM] })
+        .onSet((value) => this.onSetTarget(value as number, { STAY_ARM }));
+    } else {
+      // SIA is receive-only: without cloud commands the tile just reports the state.
+      target.setProps({ perms: [Perms.PAIRED_READ, Perms.NOTIFY] });
+    }
+
     this.service.getCharacteristic(Characteristic.StatusFault)
       .onGet(() => (this.hub.fault ? 1 : 0));
     this.service.getCharacteristic(Characteristic.StatusTampered)
@@ -49,6 +70,49 @@ export class HubAccessory {
     });
   }
 
+  dispose(): void {
+    clearTimeout(this.pendingTimer);
+  }
+
+  private async onSetTarget(value: number, unsupported: { STAY_ARM: number }): Promise<void> {
+    const { Characteristic, HapStatusError, HAPStatus } = this.api.hap;
+    const { AWAY_ARM, NIGHT_ARM, DISARM } = Characteristic.SecuritySystemTargetState;
+
+    const requested: Record<number, [Target, ArmState]> = {
+      [AWAY_ARM]: ['away', 'away'],
+      [NIGHT_ARM]: ['night', 'night'],
+      [DISARM]: ['disarmed', 'disarmed'],
+    };
+    const mapped = requested[value];
+    if (!mapped || value === unsupported.STAY_ARM) {
+      throw new HapStatusError(HAPStatus.INVALID_VALUE_IN_REQUEST);
+    }
+
+    const [target, expected] = mapped;
+    this.setPending(expected);
+    try {
+      await this.commander!(target, this.hub.arm);
+    } catch {
+      this.clearPending();
+      this.render();
+      throw new HapStatusError(HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+    }
+  }
+
+  private setPending(arm: ArmState): void {
+    clearTimeout(this.pendingTimer);
+    this.pending = arm;
+    this.pendingTimer = setTimeout(() => {
+      this.pending = undefined;
+      this.render();
+    }, PENDING_TIMEOUT_MS);
+  }
+
+  private clearPending(): void {
+    clearTimeout(this.pendingTimer);
+    this.pending = undefined;
+  }
+
   private currentState(): number {
     const { SecuritySystemCurrentState: State } = this.api.hap.Characteristic;
     if (this.hub.alarm) {
@@ -58,7 +122,10 @@ export class HubAccessory {
   }
 
   private targetState(): number {
-    return this.armValue(this.hub.arm);
+    const { SecuritySystemTargetState: Target } = this.api.hap.Characteristic;
+    const value = this.armValue(this.pending ?? this.hub.arm);
+    // A partial arm (some Ajax groups) is not a target HomeKit can be told to reach.
+    return this.commander && value === Target.STAY_ARM ? Target.AWAY_ARM : value;
   }
 
   private armValue(arm: ArmState): number {
@@ -72,6 +139,9 @@ export class HubAccessory {
   }
 
   private render(): void {
+    if (this.pending === this.hub.arm) {
+      this.clearPending();
+    }
     const { Characteristic } = this.api.hap;
     this.service.updateCharacteristic(Characteristic.SecuritySystemCurrentState, this.currentState());
     this.service.updateCharacteristic(Characteristic.SecuritySystemTargetState, this.targetState());

@@ -6,7 +6,10 @@
   "headerDisplay": "Receives events from an Ajax hub over SIA DC-09 and exposes them to HomeKit. In the Ajax app, point **Monitoring station** at this Homebridge server (see the README).",
   "schema": {
     "type": "object",
-    "required": ["name", "accountId"],
+    "required": [
+      "name",
+      "accountId"
+    ],
     "properties": {
       "name": {
         "title": "Name",
@@ -34,9 +37,24 @@
         "type": "string",
         "default": "both",
         "oneOf": [
-          { "title": "TCP and UDP", "enum": ["both"] },
-          { "title": "TCP only", "enum": ["tcp"] },
-          { "title": "UDP only", "enum": ["udp"] }
+          {
+            "title": "TCP and UDP",
+            "enum": [
+              "both"
+            ]
+          },
+          {
+            "title": "TCP only",
+            "enum": [
+              "tcp"
+            ]
+          },
+          {
+            "title": "UDP only",
+            "enum": [
+              "udp"
+            ]
+          }
         ]
       },
       "encryptionKey": {
@@ -49,10 +67,22 @@
         "type": "string",
         "default": "ascii",
         "oneOf": [
-          { "title": "Text (16, 24 or 32 characters)", "enum": ["ascii"] },
-          { "title": "Hexadecimal (32, 48 or 64 digits)", "enum": ["hex"] }
+          {
+            "title": "Text (16, 24 or 32 characters)",
+            "enum": [
+              "ascii"
+            ]
+          },
+          {
+            "title": "Hexadecimal (32, 48 or 64 digits)",
+            "enum": [
+              "hex"
+            ]
+          }
         ],
-        "condition": { "functionBody": "return !!model.encryptionKey;" }
+        "condition": {
+          "functionBody": "return !!model.encryptionKey;"
+        }
       },
       "devices": {
         "title": "Detectors",
@@ -60,7 +90,11 @@
         "description": "Detectors to expose as HomeKit sensors. Trigger a detector once and the Homebridge log tells you its zone number.",
         "items": {
           "type": "object",
-          "required": ["zone", "name", "type"],
+          "required": [
+            "zone",
+            "name",
+            "type"
+          ],
           "properties": {
             "zone": {
               "title": "Zone",
@@ -77,11 +111,36 @@
               "type": "string",
               "default": "motion",
               "oneOf": [
-                { "title": "Motion detector", "enum": ["motion"] },
-                { "title": "Door / window contact", "enum": ["contact"] },
-                { "title": "Smoke detector", "enum": ["smoke"] },
-                { "title": "Leak detector", "enum": ["leak"] },
-                { "title": "Carbon monoxide detector", "enum": ["co"] }
+                {
+                  "title": "Motion detector",
+                  "enum": [
+                    "motion"
+                  ]
+                },
+                {
+                  "title": "Door / window contact",
+                  "enum": [
+                    "contact"
+                  ]
+                },
+                {
+                  "title": "Smoke detector",
+                  "enum": [
+                    "smoke"
+                  ]
+                },
+                {
+                  "title": "Leak detector",
+                  "enum": [
+                    "leak"
+                  ]
+                },
+                {
+                  "title": "Carbon monoxide detector",
+                  "enum": [
+                    "co"
+                  ]
+                }
               ]
             }
           }
@@ -133,6 +192,75 @@
         "type": "string",
         "default": "0.0.0.0",
         "description": "Network interface to bind to."
+      },
+      "cloud": {
+        "title": "Commands from HomeKit (unofficial)",
+        "type": "object",
+        "description": "Lets HomeKit arm, disarm and switch to night mode, and reads the real state at startup. Uses the protocol of the Ajax mobile apps, which is not an official API: Ajax can change or block it, and its terms restrict reverse engineering. Use at your own risk, ideally with a dedicated Ajax account.",
+        "properties": {
+          "enabled": {
+            "title": "Enable",
+            "type": "boolean",
+            "default": false
+          },
+          "email": {
+            "title": "Ajax e-mail",
+            "type": "string",
+            "format": "email",
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          },
+          "password": {
+            "title": "Ajax password",
+            "type": "string",
+            "x-schema-form": {
+              "type": "password"
+            },
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          },
+          "totpSecret": {
+            "title": "Two-factor secret (base32)",
+            "type": "string",
+            "description": "Only if the account uses an authenticator app.",
+            "x-schema-form": {
+              "type": "password"
+            },
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          },
+          "spaceName": {
+            "title": "Space name",
+            "type": "string",
+            "description": "Only needed when the account has several spaces. The Homebridge log lists them.",
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          },
+          "syncIntervalMinutes": {
+            "title": "State check (minutes)",
+            "type": "integer",
+            "default": 15,
+            "minimum": 0,
+            "maximum": 1440,
+            "description": "How often to read the real state from Ajax. 0 only checks at startup and after a command.",
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          },
+          "clientVersion": {
+            "title": "Announced app version",
+            "type": "string",
+            "default": "3.57",
+            "description": "Raise it if the log says Ajax no longer accepts this client.",
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          }
+        }
       }
     }
   },
@@ -142,20 +270,51 @@
     {
       "type": "fieldset",
       "title": "Connection",
-      "items": ["port", "protocol", "encryptionKey", "encryptionKeyFormat"]
+      "items": [
+        "port",
+        "protocol",
+        "encryptionKey",
+        "encryptionKeyFormat"
+      ]
     },
     {
       "key": "devices",
       "type": "array",
       "buttonText": "Add detector",
-      "items": ["devices[].zone", "devices[].name", "devices[].type"]
+      "items": [
+        "devices[].zone",
+        "devices[].name",
+        "devices[].type"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Commands from HomeKit (unofficial)",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "cloud.enabled",
+        "cloud.email",
+        "cloud.password",
+        "cloud.totpSecret",
+        "cloud.spaceName",
+        "cloud.syncIntervalMinutes",
+        "cloud.clientVersion"
+      ]
     },
     {
       "type": "fieldset",
       "title": "Advanced",
       "expandable": true,
       "expanded": false,
-      "items": ["areas", "motionResetSeconds", "heartbeatTimeoutMinutes", "maxTimeSkewSeconds", "allowedAddresses", "listenAddress"]
+      "items": [
+        "areas",
+        "motionResetSeconds",
+        "heartbeatTimeoutMinutes",
+        "maxTimeSkewSeconds",
+        "allowedAddresses",
+        "listenAddress"
+      ]
     }
   ]
 }

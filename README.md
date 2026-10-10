@@ -23,7 +23,7 @@ The hub reports its events straight to Homebridge over **SIA DC-09**, the same p
 
 Be clear-eyed about this before installing:
 
-- **It cannot arm or disarm the system.** SIA is a one-way channel: the hub talks, the plugin listens. The security system tile in Home is read-only; arm and disarm with the Ajax app, a keypad or a key fob. The Ajax Enterprise API that allows remote commands is only granted to large installers, and the Ajax end user agreement forbids reverse engineering the mobile app, so this project does neither.
+- **SIA alone cannot arm or disarm the system.** It is a one-way channel: the hub talks, the plugin listens, so by default the security system tile is read-only. Commands are possible through an optional, unofficial cloud connection, described in [Commands from HomeKit](#commands-from-homekit-unofficial); read the warning there before enabling it.
 - **Detectors only report while they are armed**, unless they are configured as always active in the Ajax app. A motion detector in a disarmed system is silent, so its HomeKit sensor stays idle.
 - **Sirens and photo verification are not exposed.** SIA carries event codes only. A MotionCam / PhOD detector shows up as a regular motion sensor; its photos stay in the Ajax app.
 - **State is learned from events.** If the system changes while Homebridge is down, HomeKit is wrong until the next event. The last known state is restored after a restart.
@@ -128,6 +128,53 @@ Leave `devices` empty at first. Arm the system, trip a detector, and watch the H
 | Mains or battery trouble on the hub, or silent hub | `StatusFault` |
 
 The complete list of handled SIA codes is in [docs/events.md](docs/events.md).
+
+## Commands from HomeKit (unofficial)
+
+SIA only listens. To arm, disarm and switch to night mode from Apple Home, the plugin can also talk to the Ajax cloud the way the Ajax mobile apps do. It then:
+
+- sends **Away**, **Night** and **Off** from the Home app, Siri and automations to the hub,
+- reads the real state at startup and every few minutes, so HomeKit is right even after a restart,
+- keeps using SIA for instant events.
+
+> **Read this first.** This uses the protocol of the Ajax mobile apps. It is **not** an official API: Ajax can change it or block it without notice (it has already retired old client versions), and the Ajax end user agreement restricts reverse engineering of its software. Using it is your decision, at your own risk. Use a dedicated Ajax account with the access you need, and keep the feature off if you are not comfortable with that. It is off by default.
+
+```json
+{
+  "platform": "AjaxSia",
+  "accountId": "AB12",
+  "cloud": {
+    "enabled": true,
+    "email": "you@example.com",
+    "password": "your-ajax-password",
+    "spaceName": "Home"
+  }
+}
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `enabled` | `false` | Turns the feature on. |
+| `email`, `password` | required | The Ajax account. Stored in `config.json` like any plugin credential. |
+| `totpSecret` | none | Base32 secret of your authenticator app, if the account uses two-factor authentication. |
+| `spaceName` | none | Needed only when the account has several spaces. The log lists them. |
+| `spaceId` | none | Alternative to `spaceName`. |
+| `syncIntervalMinutes` | `15` | How often to read the real state. `0` reads only at startup and after a command. |
+| `clientVersion` | `3.57` | App version announced to Ajax. Raise it if the log says Ajax no longer accepts the client. |
+
+"Home" is not offered as a target: Ajax has no equivalent without groups. A command that is refused (hub busy, malfunction to acknowledge, no permission) is logged with the reason and reported to HomeKit as a failure.
+
+The device id and session are kept in the Homebridge storage folder (`homebridge-ajax-sia-cloud.json`, readable by its owner only), so a restart does not open a new session in the account.
+
+### Check your account first
+
+A read-only probe logs in and lists your spaces without sending any command:
+
+```sh
+npm run build
+read -rs AJAX_PASSWORD && export AJAX_PASSWORD
+AJAX_EMAIL=you@example.com node scripts/probe.mjs
+```
 
 ## Troubleshooting
 
