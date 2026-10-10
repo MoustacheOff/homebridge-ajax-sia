@@ -1,0 +1,39 @@
+name: Bug report
+description: Something is reported wrongly, or does not work
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: For a wrong state, say what you did on the hub (for example "armed in night mode from the app").
+    validations:
+      required: true
+  - type: input
+    id: hub
+    attributes:
+      label: Hub model and firmware
+      placeholder: Hub 2 (4G), OS Malevich 2.30
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Plugin, Homebridge and Node.js versions
+      placeholder: 0.1.0, 2.4.0, 24.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Debug log
+      description: Run Homebridge with `-D` and paste the lines around the event. Redact your object number if you like.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Plugin configuration
+      description: Remove the encryption key.
+      render: json
