@@ -3,7 +3,7 @@ import type { API, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformCo
 import { HubAccessory, type Commander, type HubContext } from './accessories/hub.js';
 import { ZoneAccessory, type ZoneContext } from './accessories/zone.js';
 import { AjaxModel, isZoneCode } from './ajax/model.js';
-import { AjaxCloud, sha256 } from './cloud/ajax.js';
+import { AjaxCloud, CloudError, sha256, type FailureReason } from './cloud/ajax.js';
 import { CloudController } from './cloud/controller.js';
 import { GrpcChannel } from './cloud/grpc.js';
 import { CloudStore } from './cloud/store.js';
@@ -13,6 +13,14 @@ import { SiaServer } from './sia/server.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
 
 const WATCHDOG_INTERVAL_MS = 15_000;
+/**
+ * Failures that trying again cannot fix. Repeating them would hammer the account and risk a lockout, so
+ * the plugin stops talking to Ajax until Homebridge is restarted.
+ */
+const FATAL: ReadonlySet<FailureReason> = new Set<FailureReason>([
+  'invalid-credentials', 'account-locked', 'account-not-confirmed', 'two-factor-required', 'client-rejected',
+]);
+
 /** After a command, check what the hub actually did, in case the SIA event is late or not configured. */
 const VERIFY_DELAY_MS = 6_000;
 
@@ -126,8 +134,20 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       ...(settings.totpSecret ? { totpSecret: settings.totpSecret } : {}),
       deviceId: store.deviceId,
       clientVersion: settings.clientVersion,
+      deviceModel: settings.deviceModel,
+      deviceOs: settings.deviceOs,
     });
     client.restore(store.session);
+    const identity = `${settings.deviceModel}|${settings.deviceOs}`;
+    // A session opened under another name would keep that name in the account's list of sessions: end it,
+    // and log in again under the current one.
+    const migrated = (async () => {
+      if (store.session && store.identity !== identity) {
+        this.log.info(`The Ajax session was opened under another name: ending it and logging in again as "${settings.deviceModel}"`);
+        await client.logout();
+        store.save(undefined, identity);
+      }
+    })();
     const controller = new CloudController(
       client,
       { ...(settings.spaceId ? { spaceId: settings.spaceId } : {}), ...(settings.spaceName ? { spaceName: settings.spaceName } : {}) },
@@ -136,10 +156,30 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
 
     this.log.warn('Commands from HomeKit are enabled. They use the protocol of the Ajax mobile apps, which is not an official API.');
 
-    const sync = async (): Promise<void> => {
+    let stopped: string | undefined;
+    const attempt = async <T>(task: () => Promise<T>): Promise<T> => {
+      await migrated;
+      if (stopped) {
+        throw new Error(stopped);
+      }
       try {
-        const arm = await controller.read();
-        store.save(client.current);
+        return await task();
+      } catch (error) {
+        if (error instanceof CloudError && FATAL.has(error.reason)) {
+          stopped = `Calls to Ajax are stopped to protect your account (${error.message}). Fix it, then restart Homebridge.`;
+          this.log.error(stopped);
+        }
+        throw error;
+      }
+    };
+
+    const sync = async (): Promise<void> => {
+      if (stopped) {
+        return;
+      }
+      try {
+        const arm = await attempt(() => controller.read());
+        store.save(client.current, identity);
         if (arm) {
           model.reconcile(arm);
         }
@@ -155,8 +195,8 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
 
     return async (target, current) => {
       try {
-        await controller.command(target, current);
-        store.save(client.current);
+        await attempt(() => controller.command(target, current));
+        store.save(client.current, identity);
       } catch (error) {
         this.log.error(`Could not ${target === 'disarmed' ? 'disarm' : `arm (${target})`}: ${describe(error)}`);
         throw error;
@@ -177,7 +217,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     if (hub.context.arm) {
       model.restore(hub.context.arm);
     }
-    this.hub = new HubAccessory(this.api, hub, model, commander);
+    this.hub = new HubAccessory(this.api, hub, model, commander, config.hub);
 
     for (const device of config.devices) {
       const uuid = hap.uuid.generate(`ajax-sia:zone:${config.accountId}:${device.zone}`);

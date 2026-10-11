@@ -30,7 +30,7 @@ export function createApi() {
 
   const emit = (event: 'didFinishLaunching' | 'shutdown') => void events.emit(event);
 
-  return { api, emit, registered, unregistered, FakeAccessory };
+  return { api, emit, registered, unregistered, FakeAccessory, storage };
 }
 
 export function createLog() {
