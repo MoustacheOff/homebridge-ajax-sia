@@ -2,7 +2,7 @@
   "name": "homebridge-ajax-sia",
   "displayName": "Ajax SIA",
   "type": "module",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Homebridge plugin exposing an Ajax Systems alarm (Hub 2) to Apple HomeKit, locally, over the SIA DC-09 protocol.",
   "author": "Gabriel Corral",
   "license": "MIT",
@@ -16,6 +16,7 @@
   },
   "keywords": [
     "homebridge-plugin",
+    "supports-hap",
     "homekit",
     "ajax",
     "alarm",
