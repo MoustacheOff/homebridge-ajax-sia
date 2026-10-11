@@ -7,6 +7,8 @@ import type { Session } from './ajax.js';
 interface Stored {
   deviceId: string;
   session?: Session;
+  /** How the client was named when the session was opened. */
+  identity?: string;
 }
 
 /**
@@ -31,11 +33,19 @@ export class CloudStore {
     return this.data.session;
   }
 
-  save(session: Session | undefined): void {
+  get identity(): string | undefined {
+    return this.data.identity;
+  }
+
+  /** Remembers the session, and the identity it was opened under. */
+  save(session: Session | undefined, identity?: string): void {
     if (session) {
       this.data.session = session;
     } else {
       delete this.data.session;
+    }
+    if (identity !== undefined) {
+      this.data.identity = identity;
     }
     this.write();
   }
@@ -49,7 +59,11 @@ export class CloudStore {
       if (typeof parsed.deviceId !== 'string' || !parsed.deviceId) {
         return undefined;
       }
-      return { deviceId: parsed.deviceId, ...(parsed.session ? { session: parsed.session } : {}) };
+      return {
+        deviceId: parsed.deviceId,
+        ...(parsed.session ? { session: parsed.session } : {}),
+        ...(typeof parsed.identity === 'string' ? { identity: parsed.identity } : {}),
+      };
     } catch {
       return undefined;
     }

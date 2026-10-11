@@ -4,13 +4,23 @@
 //   npm run build
 //   read -rs AJAX_PASSWORD && export AJAX_PASSWORD && AJAX_EMAIL=you@example.com node scripts/probe.mjs
 //
-// Optional: AJAX_TOTP_SECRET (authenticator secret), AJAX_CLIENT_VERSION.
+// Optional: AJAX_TOTP_SECRET (authenticator secret), AJAX_CLIENT_VERSION,
+// AJAX_DEVICE_MODEL and AJAX_DEVICE_OS (how the session is named in the Ajax app).
+//
+// The session is ended before the script exits, so it does not stay in the account's list of sessions.
 
 import { randomUUID } from 'node:crypto';
 
 import { AjaxCloud, CloudError, sha256 } from '../dist/cloud/ajax.js';
 
-const { AJAX_EMAIL: email, AJAX_PASSWORD: password, AJAX_TOTP_SECRET: totpSecret, AJAX_CLIENT_VERSION: clientVersion } = process.env;
+const {
+  AJAX_EMAIL: email,
+  AJAX_PASSWORD: password,
+  AJAX_TOTP_SECRET: totpSecret,
+  AJAX_CLIENT_VERSION: clientVersion,
+  AJAX_DEVICE_MODEL: deviceModel,
+  AJAX_DEVICE_OS: deviceOs,
+} = process.env;
 
 if (!email || !password) {
   console.error('Set AJAX_EMAIL and AJAX_PASSWORD (see the header of this file).');
@@ -25,6 +35,8 @@ const cloud = new AjaxCloud({
   ...(totpSecret ? { totpSecret } : {}),
   deviceId: randomUUID(),
   clientVersion: clientVersion ?? '3.57',
+  ...(deviceModel ? { deviceModel } : {}),
+  ...(deviceOs ? { deviceOs } : {}),
 });
 
 try {
@@ -37,5 +49,7 @@ try {
   }
 } catch (error) {
   console.error(`Failed: ${error instanceof CloudError ? `[${error.reason}] ` : ''}${error.message}`);
-  process.exit(1);
+  process.exitCode = 1;
+} finally {
+  await cloud.logout();
 }

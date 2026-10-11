@@ -1,5 +1,5 @@
 import type { ArmState } from '../ajax/model.js';
-import type { AjaxCloud, Space, SpaceState } from './ajax.js';
+import { CloudError, type AjaxCloud, type Space, type SpaceState } from './ajax.js';
 
 export interface Logger {
   debug(message: string): void;
@@ -52,20 +52,31 @@ export class CloudController {
         this.log.debug(`Sending "${command}"`);
         await this.cloud.command(id, command);
       };
+      // A plain "disarm" leaves night mode too, unless the space uses groups, where Ajax asks for the dedicated command.
+      const disarm = async () => {
+        try {
+          await run('disarm');
+        } catch (error) {
+          if (!(error instanceof CloudError) || error.detail !== 'illegal_space_security_mode') {
+            throw error;
+          }
+          await run('disarmFromNightMode');
+        }
+      };
 
       switch (target) {
         case 'disarmed':
-          await run(current === 'night' ? 'disarmFromNightMode' : 'disarm');
+          await disarm();
           return;
         case 'away':
           if (current === 'night') {
-            await run('disarmFromNightMode');
+            await disarm();
           }
           await run('arm');
           return;
         case 'night':
           if (current === 'away' || current === 'stay') {
-            await run('disarm');
+            await disarm();
           }
           await run('armToNightMode');
           return;

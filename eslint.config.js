@@ -29,4 +29,11 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': ['error', { 'caughtErrors': 'none' }],
     },
   },
+  {
+    // Command line helpers run directly by Node.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { process: 'readonly', console: 'readonly' },
+    },
+  },
 );

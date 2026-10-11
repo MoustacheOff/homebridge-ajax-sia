@@ -24,6 +24,19 @@ describe('CloudStore', () => {
     expect(new CloudStore(directory).session).toEqual({ token: 'abc', userId: 'u1' });
   });
 
+  it('remembers under which identity the session was opened', () => {
+    expect(new CloudStore(directory).identity).toBeUndefined();
+    new CloudStore(directory).save({ token: 'abc', userId: 'u1' }, 'Homebridge|Linux');
+    expect(new CloudStore(directory).identity).toBe('Homebridge|Linux');
+  });
+
+  it('keeps the identity when the session is forgotten and saved again', () => {
+    const store = new CloudStore(directory);
+    store.save({ token: 'abc', userId: 'u1' }, 'Homebridge|Linux');
+    store.save(undefined);
+    expect(new CloudStore(directory).identity).toBe('Homebridge|Linux');
+  });
+
   it('forgets the session', () => {
     const store = new CloudStore(directory);
     store.save({ token: 'abc', userId: 'u1' });

@@ -32,7 +32,7 @@ afterEach(async () => {
   await server.stop();
 });
 
-function make(channel?: GrpcChannel, extra: { totpSecret?: string } = {}): AjaxCloud {
+function make(channel?: GrpcChannel, extra: { totpSecret?: string; deviceModel?: string; deviceOs?: string } = {}): AjaxCloud {
   return new AjaxCloud({
     host: 'unused',
     port: 0,
@@ -145,6 +145,59 @@ describe('login', () => {
   });
 });
 
+describe('device identity', () => {
+  it('names the device the way the caller asks, for the list of sessions in the Ajax app', async () => {
+    handlers[LOGIN] = () => ({ message: loginSuccess() });
+    const channel = (cloud as unknown as { channel: GrpcChannel }).channel;
+    await make(channel, { deviceModel: 'Homebridge', deviceOs: 'Linux' }).login();
+
+    const { headers } = server.calls[0]!;
+    expect(headers['client-device-model']).toBe('Homebridge');
+    expect(headers['client-os']).toBe('Linux');
+  });
+
+  it('keeps announcing the same identity on later calls', async () => {
+    handlers[LOGIN] = () => ({ message: loginSuccess() });
+    handlers[SPACES] = () => ({ message: new Writer().message(1, new Writer()).finish() });
+    const channel = (cloud as unknown as { channel: GrpcChannel }).channel;
+    await make(channel, { deviceModel: 'Homebridge', deviceOs: 'Linux' }).spaces();
+
+    expect(server.calls[1]!.headers['client-device-model']).toBe('Homebridge');
+    expect(server.calls[1]!.headers['client-os']).toBe('Linux');
+  });
+});
+
+describe('logout', () => {
+  const LOGOUT = 'LogoutService/execute';
+
+  it('ends the session on the Ajax side and forgets it', async () => {
+    handlers[LOGIN] = () => ({ message: loginSuccess('a1b2', 'deadbeef') });
+    handlers[LOGOUT] = () => ({ message: success() });
+    await cloud.login();
+
+    await cloud.logout();
+
+    const call = server.calls.find((c) => c.path.endsWith(LOGOUT))!;
+    expect(call.headers['client-session-token']).toBe('a1b2');
+    expect(call.message).toHaveLength(0);
+    expect(cloud.current).toBeUndefined();
+  });
+
+  it('does nothing without a session', async () => {
+    await cloud.logout();
+    expect(server.calls).toHaveLength(0);
+  });
+
+  it('forgets the session even when Ajax cannot be reached', async () => {
+    handlers[LOGIN] = () => ({ message: loginSuccess() });
+    handlers[LOGOUT] = () => ({ status: GrpcStatus.UNAVAILABLE, text: 'down' });
+    await cloud.login();
+
+    await expect(cloud.logout()).resolves.toBeUndefined();
+    expect(cloud.current).toBeUndefined();
+  });
+});
+
 describe('spaces', () => {
   beforeEach(() => {
     handlers[LOGIN] = () => ({ message: loginSuccess('a1b2', 'deadbeef') });
@@ -240,6 +293,11 @@ describe('commands', () => {
   ] as const)('explains why %s was refused (%i)', async (command, field, text) => {
     handlers[security(command)] = () => ({ message: failure(field) });
     await expect(cloud.command('s', command)).rejects.toMatchObject({ reason: 'rejected', message: expect.stringContaining(text) });
+  });
+
+  it('keeps the name Ajax gave to a refusal', async () => {
+    handlers[security('disarmFromNightMode')] = () => ({ message: failure(6) });
+    await expect(cloud.command('s', 'disarmFromNightMode')).rejects.toMatchObject({ detail: 'illegal_space_security_mode' });
   });
 
   it('is a CloudError', async () => {

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { GrpcChannel, GrpcError, GrpcStatus, type Metadata } from './grpc.js';
+import { hostDescription } from './host.js';
 import { Message, Writer } from './protobuf.js';
 import { totp } from './totp.js';
 
@@ -26,7 +27,8 @@ export type FailureReason =
   | 'client-rejected' | 'unauthenticated' | 'unavailable' | 'rejected';
 
 export class CloudError extends Error {
-  constructor(readonly reason: FailureReason, message: string) {
+  /** @param detail the name Ajax gave to a refused command (`hub_busy`, `illegal_space_security_mode`, ...). */
+  constructor(readonly reason: FailureReason, message: string, readonly detail?: string) {
     super(message);
     this.name = 'CloudError';
   }
@@ -48,10 +50,20 @@ export interface CloudOptions {
   deviceId: string;
   /** The app version announced to the server. The server refuses versions it has retired. */
   clientVersion: string;
+  /** How this client names its device in the list of sessions of the Ajax account. */
+  deviceModel?: string;
+  /** How this client names its operating system in the list of sessions of the Ajax account. */
+  deviceOs?: string;
   timeoutMs?: number;
   /** Replaces the channel; for tests. */
   channel?: GrpcChannel;
 }
+
+/** How the client names itself in the list of sessions of the Ajax account, unless the caller says otherwise. */
+export const DEFAULT_DEVICE_MODEL = 'Homebridge';
+
+/** The operating system the plugin runs on, named like fastfetch does, e.g. `Debian GNU/Linux bookworm 12.15 aarch64`. */
+export const DEFAULT_DEVICE_OS = hostDescription();
 
 export const sha256 = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex');
 
@@ -60,6 +72,8 @@ const LOGIN_TOTP = '/systems.ajax.api.ecosystem.v3.mobilegwsvc.service.login_by_
 const FIND_SPACES = '/systems.ajax.api.ecosystem.v3.mobilegwsvc.service.find_user_spaces_with_pagination'
   + '.FindUserSpacesWithPaginationService/execute';
 const SECURITY = '/systems.ajax.api.mobile.v2.space.security.SpaceSecurityService';
+
+const LOGOUT = '/systems.ajax.api.ecosystem.v3.mobilegwsvc.service.logout.LogoutService/execute';
 
 const USER_ROLE_USER = 1;
 
@@ -165,6 +179,20 @@ export class AjaxCloud {
     return this.session;
   }
 
+  /** Ends the session on the Ajax side, so it no longer shows in the account's list of sessions. Best effort. */
+  async logout(): Promise<void> {
+    if (!this.session) {
+      return;
+    }
+    try {
+      await this.call(LOGOUT, Buffer.alloc(0), this.sessionMetadata());
+    } catch {
+      // The session is dropped locally either way; Ajax expires unused sessions on its own.
+    } finally {
+      this.session = undefined;
+    }
+  }
+
   async spaces(): Promise<Space[]> {
     const request = new Writer().varint(1, 100);
     const response = Message.decode(await this.authenticated(FIND_SPACES, request.finish()));
@@ -196,7 +224,7 @@ export class AjaxCloud {
     if (BENIGN.has(name)) {
       return;
     }
-    throw new CloudError('rejected', `Ajax refused "${command}": ${name.replace(/_/g, ' ')}`);
+    throw new CloudError('rejected', `Ajax refused "${command}": ${name.replace(/_/g, ' ')}`, name);
   }
 
   private async authenticated(path: string, message: Buffer): Promise<Buffer> {
@@ -229,8 +257,8 @@ export class AjaxCloud {
   private deviceMetadata(): Metadata {
     return {
       'client-device-id': this.options.deviceId,
-      'client-device-model': 'SM-A536B',
-      'client-os': 'Android',
+      'client-device-model': this.options.deviceModel ?? DEFAULT_DEVICE_MODEL,
+      'client-os': this.options.deviceOs ?? DEFAULT_DEVICE_OS,
       'client-version-major': this.options.clientVersion,
       'application-label': 'Ajax',
       'client-device-type': 'MOBILE',

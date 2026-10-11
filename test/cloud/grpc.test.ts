@@ -44,11 +44,11 @@ describe('GrpcChannel', () => {
 
   it('maps an error sent in the trailers', async () => {
     await start();
-    server.handler = () => ({ message: Buffer.alloc(0), status: GrpcStatus.UNAUTHENTICATED, text: 'nope: é' });
+    server.handler = () => ({ message: Buffer.alloc(0), status: GrpcStatus.UNAUTHENTICATED, text: 'nope: \u00f8' });
 
     await expect(channel.unary('/a/b', Buffer.alloc(0), {}, 2000)).rejects.toMatchObject({
       code: GrpcStatus.UNAUTHENTICATED,
-      message: 'nope: é',
+      message: 'nope: \u00f8',
     });
   });
 

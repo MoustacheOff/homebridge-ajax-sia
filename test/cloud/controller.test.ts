@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { AjaxCloud, Space } from '../../src/cloud/ajax.js';
+import { CloudError, type AjaxCloud, type Space } from '../../src/cloud/ajax.js';
 import { CloudController } from '../../src/cloud/controller.js';
 
 const space = (id: string, name: string, state: Space['state'] = 'disarmed'): Space => ({ id, hubId: '', name, state, online: true });
@@ -19,11 +19,11 @@ describe('CloudController commands', () => {
   it.each([
     ['disarmed', 'away', ['disarm']],
     ['disarmed', 'stay', ['disarm']],
-    ['disarmed', 'night', ['disarmFromNightMode']],
+    ['disarmed', 'night', ['disarm']],
     ['disarmed', 'disarmed', ['disarm']],
     ['away', 'disarmed', ['arm']],
     ['away', 'away', ['arm']],
-    ['away', 'night', ['disarmFromNightMode', 'arm']],
+    ['away', 'night', ['disarm', 'arm']],
     ['night', 'disarmed', ['armToNightMode']],
     ['night', 'away', ['disarm', 'armToNightMode']],
     ['night', 'night', ['armToNightMode']],
@@ -31,6 +31,44 @@ describe('CloudController commands', () => {
     const { controller, sent } = make([space('s1', 'Home')]);
     await controller.command(target, current);
     expect(sent).toEqual(expected);
+  });
+
+  describe('leaving night mode', () => {
+    const refused = (detail: string) => new CloudError('rejected', `Ajax refused: ${detail}`, detail);
+
+    it('uses a plain disarm: that is what a space without groups accepts', async () => {
+      const { controller, sent } = make([space('s1', 'Home')]);
+      await controller.command('disarmed', 'night');
+      expect(sent).toEqual(['disarm']);
+    });
+
+    it('falls back to the night mode command when Ajax says the space uses groups', async () => {
+      const { controller, cloud, sent } = make([space('s1', 'Home')]);
+      (cloud.command as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+        throw refused('illegal_space_security_mode');
+      });
+
+      await controller.command('disarmed', 'night');
+      expect(sent).toEqual(['disarmFromNightMode']);
+    });
+
+    it('does not fall back on other refusals', async () => {
+      const { controller, cloud, sent } = make([space('s1', 'Home')]);
+      (cloud.command as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+        throw refused('hub_busy');
+      });
+
+      await expect(controller.command('disarmed', 'night')).rejects.toThrow('hub_busy');
+      expect(sent).toEqual([]);
+    });
+
+    it('does not fall back when the failure is not a refusal from Ajax', async () => {
+      const { controller, cloud, sent } = make([space('s1', 'Home')]);
+      (cloud.command as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('network down'));
+
+      await expect(controller.command('disarmed', 'night')).rejects.toThrow('network down');
+      expect(sent).toEqual([]);
+    });
   });
 
   it('serialises commands: the hub takes one transition at a time', async () => {
