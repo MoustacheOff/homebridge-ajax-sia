@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- The Homebridge badge of the README reads the supported versions from the published package, like the Node.js one.
+
 ## [1.0.2] - 2026-10-11
 
 ### Changed

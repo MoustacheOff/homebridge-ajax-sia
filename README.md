@@ -10,7 +10,7 @@
   <a href="https://www.npmjs.com/package/homebridge-ajax-sia"><img alt="npm" src="https://badgen.net/npm/v/homebridge-ajax-sia?icon=npm&color=red"></a>
   <a href="https://github.com/MoustacheOff/homebridge-ajax-sia/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/MoustacheOff/homebridge-ajax-sia/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://nodejs.org"><img alt="Node.js" src="https://badgen.net/npm/node/homebridge-ajax-sia?icon=node&color=green"></a>
-  <a href="https://homebridge.io"><img alt="Homebridge" src="https://badgen.net/badge/homebridge/1.8%20%7C%202.x/purple"></a>
+  <a href="https://homebridge.io"><img alt="Homebridge" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.npmjs.org%2Fhomebridge-ajax-sia%2Flatest&query=%24.engines.homebridge&label=homebridge&color=491F59"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://badgen.net/badge/license/MIT/blue"></a>
 </p>
 
