@@ -7,6 +7,15 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+    ignore:
+      # Must stay on the exact version Homebridge itself ships, or the types of two copies clash.
+      - dependency-name: '@homebridge/hap-nodejs'
+      # Types follow the oldest supported Node.js, not the newest.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+      # typescript-eslint does not support TypeScript 7 yet.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
     commit-message:
       prefix: chore
   - package-ecosystem: github-actions
