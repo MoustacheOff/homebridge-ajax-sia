@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseConfig } from '../src/config.js';
+import { DEFAULT_DEVICE_MODEL, DEFAULT_DEVICE_OS, parseConfig } from '../src/config.js';
 
 const valid = { platform: 'AjaxSia', name: 'Ajax', accountId: 'ab12' };
 
@@ -70,6 +70,29 @@ describe('parseConfig', () => {
       expect(parseConfig({ ...valid, devices: [device] }).errors).toEqual([expect.stringMatching(message)]);
     });
 
+    it('keeps the model, serial and firmware of a device', () => {
+      const devices = [
+        { zone: 1, name: 'Hall', type: 'motion', model: ' MotionProtect Plus ', serial: '30E2BB490E1', firmware: '5.59.3.3' },
+      ];
+      expect(parseConfig({ ...valid, devices }).config?.devices[0]).toEqual({
+        zone: 1, name: 'Hall', type: 'motion', model: 'MotionProtect Plus', serial: '30E2BB490E1', firmware: '5.59.3.3',
+      });
+    });
+
+    it('rejects a serial HomeKit cannot display', () => {
+      const devices = [{ zone: 1, name: 'Hall', type: 'motion', serial: 'x'.repeat(65) }];
+      expect(parseConfig({ ...valid, devices }).errors).toEqual([expect.stringMatching(/serial/)]);
+    });
+
+    it('ignores a row the Homebridge UI saved without anything filled in', () => {
+      const devices = [{ type: 'motion' }, { zone: 1, name: 'Hall', type: 'motion' }, { name: '', type: 'motion' }];
+      expect(parseConfig({ ...valid, devices }).config?.devices).toEqual([{ zone: 1, name: 'Hall', type: 'motion' }]);
+    });
+
+    it('still reports a row that is half filled in', () => {
+      expect(parseConfig({ ...valid, devices: [{ name: 'Hall', type: 'motion' }] }).errors).toEqual([expect.stringMatching(/zone/)]);
+    });
+
     it('rejects a duplicated zone', () => {
       const device = { zone: 1, name: 'x', type: 'motion' };
       expect(parseConfig({ ...valid, devices: [device, device] }).errors).toEqual([expect.stringContaining('twice')]);
@@ -95,8 +118,23 @@ describe('parseConfig cloud', () => {
       password: 'hunter2',
       host: 'mobile-gw.prod.ajax.systems',
       clientVersion: '3.57',
-      syncIntervalMinutes: 15,
+      deviceModel: DEFAULT_DEVICE_MODEL,
+      deviceOs: DEFAULT_DEVICE_OS,
+      syncIntervalMinutes: 60,
     });
+  });
+
+  it('lets the user name the device shown in the Ajax app', () => {
+    const settings = { ...cloud, deviceModel: ' Homebridge ', deviceOs: 'Linux' };
+    expect(parseConfig({ ...valid, cloud: settings }).config?.cloud).toMatchObject({ deviceModel: 'Homebridge', deviceOs: 'Linux' });
+  });
+
+  it.each([
+    ['deviceModel', 'Homebridge \u00e9'],
+    ['deviceOs', 'x'.repeat(65)],
+    ['deviceModel', 'line\nbreak'],
+  ])('rejects %s "%s": it travels in an HTTP header', (field, value) => {
+    expect(parseConfig({ ...valid, cloud: { ...cloud, [field]: value } }).errors).toEqual([expect.stringContaining(field)]);
   });
 
   it('keeps the optional settings', () => {
@@ -121,5 +159,20 @@ describe('parseConfig cloud', () => {
 
   it('rejects something that is not an object', () => {
     expect(parseConfig({ ...valid, cloud: 'yes' }).errors).toEqual([expect.stringContaining('"cloud"')]);
+  });
+});
+
+describe('parseConfig hub information', () => {
+  it('is empty by default', () => {
+    expect(parseConfig(valid).config?.hub).toEqual({});
+  });
+
+  it('keeps what the user gives', () => {
+    const hub = { model: 'Hub 2 (4G)', serial: '003171A3', firmware: '' };
+    expect(parseConfig({ ...valid, hub }).config?.hub).toEqual({ model: 'Hub 2 (4G)', serial: '003171A3' });
+  });
+
+  it('rejects text that is not a string', () => {
+    expect(parseConfig({ ...valid, hub: { model: 5 } }).errors).toEqual([expect.stringMatching(/hub\.model/)]);
   });
 });

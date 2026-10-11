@@ -71,10 +71,10 @@ describe('HubAccessory', () => {
     expect(value(hubAccessory, Service.SecuritySystem, Characteristic.StatusFault)).toBe(1);
   });
 
-  it('identifies itself', () => {
+  it('identifies itself without leaking the internal account', () => {
     const { hubAccessory } = setup();
     const info = hubAccessory.getService(Service.AccessoryInformation)!;
-    expect(info.getCharacteristic(Characteristic.SerialNumber).value).toBe('AB12');
+    expect(info.getCharacteristic(Characteristic.SerialNumber).value).toBe('Ajax hub');
   });
 });
 
@@ -273,5 +273,60 @@ describe('HubAccessory with commands', () => {
     hub.dispose();
     vi.advanceTimersByTime(60_000);
     expect(target.value).toBe(Target.AWAY_ARM);
+  });
+});
+
+describe('accessory information', () => {
+  const info = (accessory: PlatformAccessory) => {
+    const service = accessory.getService(Service.AccessoryInformation)!;
+    const read = (characteristic: typeof Characteristic.Model) => service.getCharacteristic(characteristic)!.value;
+    return {
+      model: read(Characteristic.Model),
+      serial: read(Characteristic.SerialNumber),
+      firmware: read(Characteristic.FirmwareRevision),
+      manufacturer: read(Characteristic.Manufacturer),
+    };
+  };
+
+  it('shows what the user configured', () => {
+    const { api, FakeAccessory } = createApi();
+    const hub = new FakeAccessory('Ajax', hap.uuid.generate('hub')) as unknown as PlatformAccessory<HubContext>;
+    hub.context = { accountId: 'AB12' };
+    new HubAccessory(api, hub, new AjaxModel(), undefined, { model: 'Hub 2 (4G)', serial: '003171A3', firmware: 'OS Malevich 2.30' });
+    expect(info(hub)).toEqual({ model: 'Hub 2 (4G)', serial: '003171A3', firmware: 'OS Malevich 2.30', manufacturer: 'Ajax Systems' });
+  });
+
+  it('falls back to something meaningful, never to the internal account', () => {
+    const { api, FakeAccessory } = createApi();
+    const hub = new FakeAccessory('Ajax', hap.uuid.generate('hub')) as unknown as PlatformAccessory<HubContext>;
+    hub.context = { accountId: 'AB12' };
+    new HubAccessory(api, hub, new AjaxModel());
+
+    const shown = info(hub);
+    expect(shown.serial).toBe('Ajax hub');
+    expect(shown.model).toBe('Hub');
+    expect(shown.firmware).toMatch(/^\d+\.\d+\.\d+/);
+    expect(JSON.stringify(shown)).not.toContain('AB12');
+  });
+
+  it('describes a detector', () => {
+    const { api, FakeAccessory } = createApi();
+    const accessory = new FakeAccessory('Hall', hap.uuid.generate('z1')) as unknown as PlatformAccessory<ZoneContext>;
+    accessory.context = { zone: 1, type: 'motion' };
+    const detail = { model: 'MotionProtect Plus', serial: '30E2BB490E1', firmware: '5.59.3.3' };
+    new ZoneAccessory(api, accessory, { zone: 1, name: 'Hall', type: 'motion', ...detail }, new AjaxModel(), 30);
+    expect(info(accessory)).toEqual({ ...detail, manufacturer: 'Ajax Systems' });
+  });
+
+  it('names a detector by its kind and number when nothing is configured', () => {
+    const { api, FakeAccessory } = createApi();
+    const accessory = new FakeAccessory('Door', hap.uuid.generate('z2')) as unknown as PlatformAccessory<ZoneContext>;
+    accessory.context = { zone: 2, type: 'contact' };
+    new ZoneAccessory(api, accessory, { zone: 2, name: 'Door', type: 'contact' }, new AjaxModel(), 30);
+
+    const shown = info(accessory);
+    expect(shown.model).toBe('Door/window contact');
+    expect(shown.serial).toBe('Device 2');
+    expect(shown.serial).not.toMatch(/zone/i);
   });
 });

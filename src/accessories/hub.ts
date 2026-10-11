@@ -1,6 +1,8 @@
 import type { API, PlatformAccessory, Service } from 'homebridge';
 
 import type { AjaxModel, ArmState, HubState } from '../ajax/model.js';
+import type { AccessoryInfo } from '../config.js';
+import { PLUGIN_VERSION } from '../settings.js';
 
 export type HubContext = {
   accountId: string;
@@ -23,19 +25,24 @@ export class HubAccessory {
   private pending?: ArmState;
   private pendingTimer?: NodeJS.Timeout;
 
-  /** @param commander when given, arming and disarming from HomeKit is enabled; otherwise the tile is read-only. */
+  /**
+   * @param commander when given, arming and disarming from HomeKit is enabled; otherwise the tile is read-only.
+   * @param info what HomeKit shows on the accessory's information page.
+   */
   constructor(
     private readonly api: API,
     private readonly accessory: PlatformAccessory<HubContext>,
     private readonly model: AjaxModel,
     private readonly commander?: Commander,
+    info: AccessoryInfo = {},
   ) {
     const { Service, Characteristic, Perms } = api.hap;
 
     accessory.getService(Service.AccessoryInformation)!
       .setCharacteristic(Characteristic.Manufacturer, 'Ajax Systems')
-      .setCharacteristic(Characteristic.Model, 'Hub (SIA DC-09)')
-      .setCharacteristic(Characteristic.SerialNumber, accessory.context.accountId);
+      .setCharacteristic(Characteristic.Model, info.model ?? 'Hub')
+      .setCharacteristic(Characteristic.SerialNumber, info.serial ?? 'Ajax hub')
+      .setCharacteristic(Characteristic.FirmwareRevision, info.firmware ?? PLUGIN_VERSION);
 
     this.service = accessory.getService(Service.SecuritySystem) ?? accessory.addService(Service.SecuritySystem, accessory.displayName);
     this.service.setCharacteristic(Characteristic.Name, accessory.displayName);
@@ -49,6 +56,8 @@ export class HubAccessory {
     if (commander) {
       const { STAY_ARM, AWAY_ARM, NIGHT_ARM, DISARM } = Characteristic.SecuritySystemTargetState;
       // "Home" has no Ajax equivalent without groups, so it is not offered; it can still be read.
+      // Set a reachable value first, so narrowing the valid values does not trip over the default of 0.
+      target.updateValue(this.targetState());
       target
         .setProps({ perms: [Perms.PAIRED_READ, Perms.PAIRED_WRITE, Perms.NOTIFY], validValues: [AWAY_ARM, NIGHT_ARM, DISARM] })
         .onSet((value) => this.onSetTarget(value as number, { STAY_ARM }));

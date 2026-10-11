@@ -1,9 +1,22 @@
+import { DEFAULT_DEVICE_MODEL, DEFAULT_DEVICE_OS } from './cloud/ajax.js';
 import type { Protocol } from './sia/server.js';
+
+export { DEFAULT_DEVICE_MODEL, DEFAULT_DEVICE_OS };
 
 export const ZONE_TYPES = ['motion', 'contact', 'smoke', 'leak', 'co'] as const;
 export type ZoneType = typeof ZONE_TYPES[number];
 
-export interface DeviceConfig {
+/** What HomeKit shows in an accessory's information page. All optional: the Ajax app has the real values. */
+export interface AccessoryInfo {
+  /** Marketing name, for example "MotionProtect Plus". */
+  model?: string;
+  /** Serial number, for example the "device ID" shown at the bottom of the device page in the Ajax app. */
+  serial?: string;
+  /** Firmware version, as shown in the Ajax app. Defaults to the version of this plugin. */
+  firmware?: string;
+}
+
+export interface DeviceConfig extends AccessoryInfo {
   zone: number;
   name: string;
   type: ZoneType;
@@ -17,6 +30,8 @@ export interface CloudConfig {
   spaceName?: string;
   host: string;
   clientVersion: string;
+  deviceModel: string;
+  deviceOs: string;
   syncIntervalMinutes: number;
 }
 
@@ -30,6 +45,7 @@ export interface Config {
   protocol: Protocol;
   areas: number;
   devices: DeviceConfig[];
+  hub: AccessoryInfo;
   motionResetSeconds: number;
   maxTimeSkewSeconds: number;
   heartbeatTimeoutMinutes: number;
@@ -84,6 +100,7 @@ export function parseConfig(raw: Raw): ConfigResult {
     protocol: protocol as Protocol,
     areas: integer('areas', 1, 1, 9),
     devices,
+    hub: parseInfo(raw.hub, 'hub', errors),
     motionResetSeconds: integer('motionResetSeconds', 30, 1, 3600),
     maxTimeSkewSeconds: integer('maxTimeSkewSeconds', 60, 0, 86400),
     heartbeatTimeoutMinutes: integer('heartbeatTimeoutMinutes', 0, 0, 1440),
@@ -132,6 +149,10 @@ function parseDevices(value: unknown, errors: string[]): DeviceConfig[] {
   value.forEach((entry: Raw, index) => {
     const label = `devices[${index}]`;
     const { zone, name, type } = entry ?? {};
+    // The Homebridge UI saves a row for a detector the user has not filled in yet (only the default type set).
+    if (zone === undefined && (name === undefined || name === '')) {
+      return;
+    }
     if (typeof zone !== 'number' || !Number.isInteger(zone) || zone < 1 || zone > 9999) {
       errors.push(`${label}.zone must be an integer between 1 and 9999 (zone 0 is the hub itself)`);
       return;
@@ -149,14 +170,41 @@ function parseDevices(value: unknown, errors: string[]): DeviceConfig[] {
       return;
     }
     seen.add(zone);
-    devices.push({ zone, name: name.trim(), type: type as ZoneType });
+    devices.push({ zone, name: name.trim(), type: type as ZoneType, ...parseInfo(entry, label, errors) });
   });
 
   return devices;
 }
 
+const MAX_INFO_LENGTH = 64;
+
+/** Reads the optional model, serial and firmware of an accessory. HomeKit limits each of them to 64 characters. */
+function parseInfo(value: unknown, label: string, errors: string[]): AccessoryInfo {
+  if (value === undefined || value === null) {
+    return {};
+  }
+  const raw = value as Raw;
+  const info: AccessoryInfo = {};
+  for (const field of ['model', 'serial', 'firmware'] as const) {
+    const entry = raw[field];
+    if (entry === undefined || entry === '') {
+      continue;
+    }
+    if (typeof entry !== 'string' || entry.trim().length > MAX_INFO_LENGTH) {
+      errors.push(`${label}.${field} must be text of at most ${MAX_INFO_LENGTH} characters`);
+    } else {
+      info[field] = entry.trim();
+    }
+  }
+  return info;
+}
+
 /** Version of the Ajax Android app announced to the server, known to be accepted at the time of writing. */
 export const DEFAULT_CLIENT_VERSION = '3.57';
+
+/** SIA already delivers events as they happen, so the cloud is only asked now and then, to keep the load on it low. */
+const DEFAULT_SYNC_MINUTES = 60;
+
 
 function parseCloud(value: unknown, errors: string[]): CloudConfig | undefined {
   if (value === undefined || value === null) {
@@ -192,10 +240,17 @@ function parseCloud(value: unknown, errors: string[]): CloudConfig | undefined {
     errors.push('"cloud.password" is required to send commands');
   }
 
-  const syncInterval = raw.syncIntervalMinutes ?? 15;
+  const syncInterval = raw.syncIntervalMinutes ?? DEFAULT_SYNC_MINUTES;
   const validInterval = typeof syncInterval === 'number' && Number.isInteger(syncInterval) && syncInterval >= 0 && syncInterval <= 1440;
   if (!validInterval) {
     errors.push('"cloud.syncIntervalMinutes" must be an integer between 0 and 1440');
+  }
+
+  for (const field of ['deviceModel', 'deviceOs']) {
+    const entry = raw[field];
+    if (typeof entry === 'string' && !/^[\x20-\x7e]{1,64}$/.test(entry.trim())) {
+      errors.push(`"cloud.${field}" must be 1 to 64 printable ASCII characters`);
+    }
   }
 
   const totpSecret = text('totpSecret');
@@ -212,6 +267,8 @@ function parseCloud(value: unknown, errors: string[]): CloudConfig | undefined {
     ...(spaceName ? { spaceName } : {}),
     host: text('host') ?? 'mobile-gw.prod.ajax.systems',
     clientVersion: text('clientVersion') ?? DEFAULT_CLIENT_VERSION,
-    syncIntervalMinutes: validInterval ? (syncInterval as number) : 15,
+    deviceModel: text('deviceModel') ?? DEFAULT_DEVICE_MODEL,
+    deviceOs: text('deviceOs') ?? DEFAULT_DEVICE_OS,
+    syncIntervalMinutes: validInterval ? (syncInterval as number) : DEFAULT_SYNC_MINUTES,
   };
 }

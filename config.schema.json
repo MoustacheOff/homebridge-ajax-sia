@@ -142,6 +142,24 @@
                   ]
                 }
               ]
+            },
+            "model": {
+              "title": "Model",
+              "type": "string",
+              "maxLength": 64,
+              "description": "Shown in HomeKit, for example MotionProtect Plus."
+            },
+            "serial": {
+              "title": "Serial number",
+              "type": "string",
+              "maxLength": 64,
+              "description": "For example the \"device ID\" at the bottom of the device page in the Ajax app."
+            },
+            "firmware": {
+              "title": "Firmware",
+              "type": "string",
+              "maxLength": 64,
+              "description": "As shown in the Ajax app. Leave empty to show the version of this plugin."
             }
           }
         }
@@ -243,10 +261,10 @@
           "syncIntervalMinutes": {
             "title": "State check (minutes)",
             "type": "integer",
-            "default": 15,
+            "default": 60,
             "minimum": 0,
             "maximum": 1440,
-            "description": "How often to read the real state from Ajax. 0 only checks at startup and after a command.",
+            "description": "How often to read the real state from Ajax. SIA already reports changes as they happen, so a long interval is fine. 0 only checks at startup and after a command.",
             "condition": {
               "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
             }
@@ -259,6 +277,48 @@
             "condition": {
               "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
             }
+          },
+          "deviceModel": {
+            "title": "Device name shown in the Ajax app",
+            "type": "string",
+            "maxLength": 64,
+            "description": "How this plugin names itself in the list of sessions of your Ajax account, so you can recognise it there.",
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          },
+          "deviceOs": {
+            "title": "System name shown in the Ajax app",
+            "type": "string",
+            "maxLength": 64,
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          }
+        }
+      },
+      "hub": {
+        "title": "Hub information",
+        "type": "object",
+        "description": "What HomeKit shows for the alarm. All optional.",
+        "properties": {
+          "model": {
+            "title": "Model",
+            "type": "string",
+            "maxLength": 64,
+            "description": "Shown in HomeKit, for example MotionProtect Plus."
+          },
+          "serial": {
+            "title": "Serial number",
+            "type": "string",
+            "maxLength": 64,
+            "description": "For example the hub ID shown in the Ajax app next to the space name."
+          },
+          "firmware": {
+            "title": "Firmware",
+            "type": "string",
+            "maxLength": 64,
+            "description": "As shown in the Ajax app. Leave empty to show the version of this plugin."
           }
         }
       }
@@ -278,13 +338,27 @@
       ]
     },
     {
+      "type": "fieldset",
+      "title": "Hub information",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "hub.model",
+        "hub.serial",
+        "hub.firmware"
+      ]
+    },
+    {
       "key": "devices",
       "type": "array",
       "buttonText": "Add detector",
       "items": [
         "devices[].zone",
         "devices[].name",
-        "devices[].type"
+        "devices[].type",
+        "devices[].model",
+        "devices[].serial",
+        "devices[].firmware"
       ]
     },
     {
@@ -299,7 +373,9 @@
         "cloud.totpSecret",
         "cloud.spaceName",
         "cloud.syncIntervalMinutes",
-        "cloud.clientVersion"
+        "cloud.clientVersion",
+        "cloud.deviceModel",
+        "cloud.deviceOs"
       ]
     },
     {
