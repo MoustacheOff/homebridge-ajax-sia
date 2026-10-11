@@ -29,8 +29,7 @@
         "type": "integer",
         "default": 7777,
         "minimum": 1,
-        "maximum": 65535,
-        "description": "Port the plugin listens on. Enter the same one on the hub."
+        "description": "Port the plugin listens on. Enter the same one on the hub. Allowed: 1 to 65535."
       },
       "protocol": {
         "title": "Transport",
@@ -100,7 +99,7 @@
               "title": "Zone",
               "type": "integer",
               "minimum": 1,
-              "maximum": 9999
+              "description": "Allowed: 1 to 9999."
             },
             "name": {
               "title": "Name",
@@ -169,32 +168,28 @@
         "type": "integer",
         "default": 1,
         "minimum": 1,
-        "maximum": 9,
-        "description": "Number of Ajax groups. With more than one, the alarm shows \"Home\" until every group is armed."
+        "description": "Number of Ajax groups. With more than one, the alarm shows \"Home\" until every group is armed. Allowed: 1 to 9."
       },
       "motionResetSeconds": {
         "title": "Motion reset (seconds)",
         "type": "integer",
         "default": 30,
         "minimum": 1,
-        "maximum": 3600,
-        "description": "Ajax reports a motion once. HomeKit shows it for this long."
+        "description": "Ajax reports a motion once. HomeKit shows it for this long. Allowed: 1 to 3600."
       },
       "heartbeatTimeoutMinutes": {
         "title": "Hub silence timeout (minutes)",
         "type": "integer",
         "default": 0,
         "minimum": 0,
-        "maximum": 1440,
-        "description": "Report a fault when the hub sends nothing for this long. Needs \"Periodic test\" enabled on the hub, with a shorter interval. 0 disables."
+        "description": "Report a fault when the hub sends nothing for this long. Needs \"Periodic test\" enabled on the hub, with a shorter interval. 0 disables. Allowed: 0 to 1440."
       },
       "maxTimeSkewSeconds": {
         "title": "Allowed clock difference (seconds)",
         "type": "integer",
         "default": 60,
         "minimum": 0,
-        "maximum": 86400,
-        "description": "Messages carrying a timestamp further from this server's clock are refused. 0 disables the check."
+        "description": "Messages carrying a timestamp further from this server's clock are refused. 0 disables the check. Allowed: 0 to 86400."
       },
       "allowedAddresses": {
         "title": "Allowed hub addresses",
@@ -263,8 +258,7 @@
             "type": "integer",
             "default": 60,
             "minimum": 0,
-            "maximum": 1440,
-            "description": "How often to read the real state from Ajax. SIA already reports changes as they happen, so a long interval is fine. 0 only checks at startup and after a command.",
+            "description": "How often to read the real state from Ajax. SIA already reports changes as they happen, so a long interval is fine. 0 only checks at startup and after a command. Allowed: 0 to 1440.",
             "condition": {
               "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
             }
