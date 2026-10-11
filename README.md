@@ -9,7 +9,7 @@
 
 Bring an [Ajax Systems](https://ajax.systems) alarm into Apple Home. By default it works **locally**, with no cloud account, no API key and no extra hardware.
 
-The hub reports its events straight to Homebridge over **SIA DC-09**, the same protocol it uses to talk to a monitoring station. The plugin turns them into a HomeKit security system and sensors, so you can see the alarm state on all your Apple devices (iPhone, iPad, Apple Watch, Mac and HomePod), get notified, and use it in automations. Arming and disarming from HomeKit is possible too, through an optional and unofficial connection described [below](#commands-from-homekit-unofficial).
+The hub reports its events straight to Homebridge over **SIA DC-09**, the same protocol it uses to talk to a monitoring station. The plugin turns them into a HomeKit security system and sensors, so you can see the alarm state on all your Apple devices (iPhone, iPad, Apple Watch and Mac), get notified, and use it in automations. Arming and disarming from HomeKit is possible too, through an optional and unofficial connection described [below](#commands-from-homekit-unofficial).
 
 ## What you get
 
