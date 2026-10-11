@@ -1,11 +1,18 @@
-# homebridge-ajax-sia
+<p align="center">
+  <a href="https://homebridge.io"><img src="https://raw.githubusercontent.com/homebridge/branding/latest/logos/homebridge-color-round-stylized.png" alt="Homebridge" height="140"></a>
+</p>
 
-[![npm](https://badgen.net/npm/v/homebridge-ajax-sia)](https://www.npmjs.com/package/homebridge-ajax-sia)
-[![CI](https://github.com/MoustacheOff/homebridge-ajax-sia/actions/workflows/ci.yml/badge.svg)](https://github.com/MoustacheOff/homebridge-ajax-sia/actions/workflows/ci.yml)
-[![Node.js](https://badgen.net/npm/node/homebridge-ajax-sia)](https://nodejs.org)
-[![Homebridge](https://badgen.net/badge/homebridge/1.8%20%7C%202.x/purple)](https://homebridge.io)
-[![Apple Home](https://badgen.net/badge/Apple%20Home/security%20system/blue)](https://www.apple.com/home-app/)
-[![License: MIT](https://badgen.net/badge/license/MIT/green)](LICENSE)
+<h1 align="center">homebridge-ajax-sia</h1>
+
+<p align="center">Ajax Systems alarm in Apple Home, through Homebridge</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/homebridge-ajax-sia"><img alt="npm" src="https://img.shields.io/npm/v/homebridge-ajax-sia?logo=npm&logoColor=white&color=CB3837"></a>
+  <a href="https://github.com/MoustacheOff/homebridge-ajax-sia/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/MoustacheOff/homebridge-ajax-sia/ci.yml?logo=githubactions&logoColor=white&label=CI"></a>
+  <a href="https://nodejs.org"><img alt="Node.js" src="https://img.shields.io/node/v/homebridge-ajax-sia?logo=nodedotjs&logoColor=white&color=5FA04E"></a>
+  <a href="https://homebridge.io"><img alt="Homebridge" src="https://img.shields.io/badge/homebridge-1.8%20%7C%202.x-491F59"></a>
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
+</p>
 
 Bring an [Ajax Systems](https://ajax.systems) alarm into Apple Home. By default it works **locally**, with no cloud account, no API key and no extra hardware.
 
