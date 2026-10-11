@@ -2,7 +2,7 @@
   "name": "homebridge-ajax-sia",
   "displayName": "Ajax SIA",
   "type": "module",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Homebridge plugin exposing an Ajax Systems alarm (Hub 2) to Apple HomeKit, locally, over the SIA DC-09 protocol.",
   "author": "Gabriel Corral",
   "license": "MIT",
@@ -30,7 +30,7 @@
     "config.schema.json"
   ],
   "engines": {
-    "node": "^22.10.0 || ^24.0.0",
+    "node": "^22.10.0 || ^24.0.0 || ^26.0.0",
     "homebridge": "^1.8.0 || ^2.0.0"
   },
   "scripts": {

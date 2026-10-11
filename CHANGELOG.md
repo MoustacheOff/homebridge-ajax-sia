@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-11
+
+### Added
+
+- Support for Node.js 26, tested alongside 22 and 24.
+
+### Changed
+
+- Releases are staged on npm from GitHub Actions and approved by the maintainer with two-factor authentication.
+- The README shows the usual Homebridge badges.
+- Development dependencies: vitest 5.
+
 ## [1.0.0] - 2026-10-11
 
 First release.
@@ -21,5 +33,6 @@ First release.
   - The plugin names itself `Homebridge`, with the operating system it runs on (read from the machine, for example `Debian GNU/Linux bookworm 12.15 aarch64` or `macOS 27.0.1`), in the list of sessions of the Ajax account, and renames its session when that name changes.
 - `scripts/probe.mjs`, a read-only check of an Ajax account that ends its session when it exits.
 
-[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/MoustacheOff/homebridge-ajax-sia/releases/tag/v1.0.0

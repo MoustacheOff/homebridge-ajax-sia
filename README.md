@@ -1,8 +1,12 @@
 # homebridge-ajax-sia
 
+[![npm](https://img.shields.io/npm/v/homebridge-ajax-sia?label=latest)](https://www.npmjs.com/package/homebridge-ajax-sia)
+[![downloads](https://img.shields.io/npm/dt/homebridge-ajax-sia?label=downloads)](https://www.npmjs.com/package/homebridge-ajax-sia)
 [![CI](https://github.com/MoustacheOff/homebridge-ajax-sia/actions/workflows/ci.yml/badge.svg)](https://github.com/MoustacheOff/homebridge-ajax-sia/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/homebridge-ajax-sia)](https://www.npmjs.com/package/homebridge-ajax-sia)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/node/v/homebridge-ajax-sia)](https://nodejs.org)
+[![Homebridge](https://img.shields.io/badge/homebridge-1.8%20%7C%202.x-491F59)](https://homebridge.io)
+[![Apple Home](https://img.shields.io/badge/Apple%20Home-security%20system-blue)](https://www.apple.com/home-app/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 Bring an [Ajax Systems](https://ajax.systems) alarm into Apple Home. By default it works **locally**, with no cloud account, no API key and no extra hardware.
 
@@ -40,7 +44,7 @@ With direct SIA, the hub sends its events to your server instead of an alarm rec
 
 ## Requirements
 
-- Homebridge 1.8 or 2.x, Node.js 22 or 24
+- Homebridge 1.8 or 2.x, Node.js 22, 24 or 26
 - An Ajax hub with firmware **OS Malevich 2.7 or later** (Hub 2, Hub 2 Plus, Hub 2 (4G) and other recent hubs)
 - The hub must be able to reach the Homebridge server on your network
 - No runtime dependency: the plugin only uses Node.js built-ins
