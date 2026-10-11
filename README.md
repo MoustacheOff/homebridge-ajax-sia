@@ -244,6 +244,16 @@ npm run build
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Acknowledgements
+
+This plugin is written from scratch, and it would not exist without the people who documented how Ajax hubs talk:
+
+- [Ajax's documentation on SIA DC-09](https://ajax.systems/support/posts/how-to-use-sia-for-cms-connection/) and the [Home Assistant SIA integration](https://www.home-assistant.io/integrations/sia/), for the hub-side setup and the shape of the events.
+- [pysiaalarm](https://github.com/eavanvalkenburg/pysiaalarm) (MIT), the reference I checked the SIA DC-09 frames, checksums and encryption against.
+- [aegis-hass](https://github.com/bvis/aegis-hass) (MIT), an unofficial Home Assistant integration. Studying how it talks to the Ajax cloud is what made the optional commands possible. The client here is a separate, dependency-free implementation.
+- [ha-ajax-systems](https://github.com/exabird/ha-ajax-systems) and [ajax-security-hass](https://github.com/foXaCe/ajax-security-hass), other Home Assistant integrations whose approaches I compared.
+- The [SIA DC-09 standard](https://www.securityindustry.org/) of the Security Industry Association, and the Homebridge [plugin template](https://github.com/homebridge/homebridge-plugin-template) and developer documentation.
+
 ## Disclaimer
 
 This is an independent project. It is not affiliated with, endorsed by or supported by Ajax Systems. "Ajax" is a trademark of its owner. Home notifications are a convenience, not a safety system: do not rely on HomeKit alone to be warned of a fire, an intrusion or a leak.
