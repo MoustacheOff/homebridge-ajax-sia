@@ -12,6 +12,8 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "declaration": false,
     "skipLibCheck": true,
     "sourceMap": true,

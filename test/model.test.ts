@@ -105,6 +105,16 @@ describe('AjaxModel', () => {
       expect(model.zone(12).intrusion).toBe(false);
     });
 
+    it('treats a verified burglary as an alarm of the hub, whose number is an area and not a detector', () => {
+      model.apply(ev('BV', 3, 1));
+      expect(model.hub.alarm).toBe(true);
+      expect(model.zone(3).intrusion).toBe(false);
+      expect(zoneUpdates).toEqual([]);
+
+      model.apply(ev('OP', 501, 1));
+      expect(model.hub.alarm).toBe(false);
+    });
+
     it('keeps the alarm while another zone is still tripped', () => {
       model.apply(ev('BA', 1));
       model.apply(ev('BA', 2));
@@ -213,6 +223,8 @@ describe('AjaxModel', () => {
     expect(isZoneCode('BA')).toBe(true);
     expect(isZoneCode('XT')).toBe(true);
     expect(isZoneCode('CL')).toBe(false);
+    // "Burglary verified" carries an area, not a detector.
+    expect(isZoneCode('BV')).toBe(false);
   });
 });
 

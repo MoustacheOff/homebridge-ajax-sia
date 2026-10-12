@@ -31,8 +31,8 @@ export class HubAccessory {
    */
   constructor(
     private readonly api: API,
-    private readonly accessory: PlatformAccessory<HubContext>,
-    private readonly model: AjaxModel,
+    accessory: PlatformAccessory<HubContext>,
+    model: AjaxModel,
     private readonly commander?: Commander,
     info: AccessoryInfo = {},
   ) {

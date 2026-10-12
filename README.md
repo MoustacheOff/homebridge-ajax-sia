@@ -72,7 +72,7 @@ In the Ajax app, open the space settings and go to **Security companies → Moni
 3. **Object number** (**Site number** in the app): pick any hexadecimal value, 3 to 16 characters, for example `AB12`. It is only an identifier that the hub puts in every message: the plugin ignores messages carrying another one. It has to match `accountId` in the plugin.
 4. **Encryption** (recommended): enable it and set a key of 16 characters. Put the same key in the plugin.
 5. **Periodic test**: enable it, for example every minute, if you want the plugin to notice a silent hub (see `heartbeatTimeoutMinutes`).
-6. Keep only the channels that can reach your server. Ethernet is the most reliable; a cellular channel cannot reach a private address, so turn it off for this connection.
+6. Keep only the channels that can reach your server. Ethernet is the most reliable; a cellular channel cannot reach a private address, so turn it off for this connection. With OS Malevich 2.16 or later you can also turn off **One IP address for all alarm channels** to give each channel its own address.
 
 Make sure no firewall blocks the port on the Homebridge host.
 
