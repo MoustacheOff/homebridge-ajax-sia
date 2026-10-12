@@ -41,6 +41,32 @@ describe('AjaxModel', () => {
       expect(model.hub.arm).toBe('disarmed');
     });
 
+    it.each([
+      ['by its schedule', 'NO'],
+      ['with a duress code', 'ND'],
+    ])('leaves night mode %s', (_how, code) => {
+      model.apply(ev('NL', undefined, 1));
+      expect(model.hub.arm).toBe('night');
+      model.apply(ev(code, undefined, 1));
+      expect(model.hub.arm).toBe('disarmed');
+    });
+
+    it('tells the user when the hub could not activate night mode, without changing the state', () => {
+      const warnings: string[] = [];
+      model.on('hubWarning', (message) => warnings.push(message));
+      model.apply(ev('NE', undefined, 1));
+      expect(model.hub.arm).toBe('disarmed');
+      expect(warnings).toEqual(['The hub reports that night mode could not be activated']);
+    });
+
+    it('warns about a duress code', () => {
+      const warnings: string[] = [];
+      model.on('hubWarning', (message) => warnings.push(message));
+      model.apply(ev('NL', undefined, 1));
+      model.apply(ev('ND', undefined, 1));
+      expect(warnings).toEqual(['Night mode was turned off with a duress code']);
+    });
+
     it('prefers night mode over a plain armed state', () => {
       model.apply(ev('CG', undefined, 1));
       model.apply(ev('NL', undefined, 1));
