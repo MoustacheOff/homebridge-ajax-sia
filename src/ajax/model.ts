@@ -37,6 +37,8 @@ interface ModelEvents {
   alarm: [number, AlarmKind];
   /** Fired for every event the model has no use for, so it can be logged for troubleshooting. */
   ignored: [SiaEvent];
+  /** Something the user should know that does not change the state: worth a line in the log. */
+  hubWarning: [string];
 }
 
 /** Zone reserved for the hub itself: tamper, battery and mains events carry no zone, or zone 0. */
@@ -44,6 +46,8 @@ const HUB_ZONE = 0;
 
 const ARMED_CODES = new Set(['CL', 'CA', 'CP', 'CF', 'CG']);
 const DISARMED_CODES = new Set(['OP', 'OA', 'OK', 'OR', 'OS', 'OG']);
+/** Night mode left: from a device (`NP`), by its schedule (`NO`) or with a duress code (`ND`). */
+const NIGHT_OFF_CODES = new Set(['NP', 'NO', 'ND']);
 
 /** Alarm code -> what it raises. The matching restore codes clear it. */
 const ALARMS: Record<string, AlarmKind> = {
@@ -171,9 +175,14 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
       this.publishHub();
     } else if (DISARMED_CODES.has(code)) {
       this.disarm(event.area);
-    } else if (code === 'NP') {
+    } else if (NIGHT_OFF_CODES.has(code)) {
       this.night = false;
       this.publishHub();
+      if (code === 'ND') {
+        this.emit('hubWarning', 'Night mode was turned off with a duress code');
+      }
+    } else if (code === 'NE') {
+      this.emit('hubWarning', 'The hub reports that night mode could not be activated');
     } else if (code in ALARMS) {
       this.raise(ALARMS[code]!, event);
     } else if (code in RESTORES) {

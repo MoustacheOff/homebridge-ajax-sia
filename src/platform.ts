@@ -267,6 +267,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       this.log.info(`Hub: ${hub.arm}${alarm}${hub.tampered ? ', tampered' : ''}${hub.fault ? ', fault' : ''}`);
     });
     model.on('ignored', (event) => this.log.debug(`Ignored event ${event.code}${event.zone !== undefined ? ` (zone ${event.zone})` : ''}`));
+    model.on('hubWarning', (message) => this.log.warn(message));
   }
 
   private announceUnknownZone(config: Config, code: string, zone: number | undefined): void {

@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- Night mode that the hub turns off by itself (`NO`, by its schedule) or with a duress code (`ND`) is now followed in HomeKit, instead of staying on Night until the next check. A refused night arming (`NE`) and a duress code are written to the log.
 - A verified burglary (`BV`) is treated as an alarm of the hub, as SIA defines it: the number that comes with it is an area, no longer mistaken for a detector.
 - The README mentions the per-channel IP addresses of OS Malevich 2.16.
 - The README says that a home hub (Apple TV, HomePod or HomePod mini) is needed to use the alarm away from home and in automations.
