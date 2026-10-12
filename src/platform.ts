@@ -29,13 +29,6 @@ interface CloudLink {
   readDevices: () => Promise<void>;
 }
 
-/**
- * A fault reported by the Ajax account is often passing (the hub lost the monitoring station for a moment while
- * Homebridge restarted, a detector is changing its battery): look again shortly instead of waiting for the next check.
- */
-const RECHECK_MS = 120_000;
-const MAX_RECHECKS = 5;
-
 /** After a command, check what the hub actually did, in case the SIA event is late or not configured. */
 const VERIFY_DELAY_MS = 6_000;
 
@@ -48,10 +41,6 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
   private readonly zones: ZoneAccessory[] = [];
   private readonly zoneByNumber = new Map<number, ZoneAccessory>();
   private devicesRead = false;
-  private recheck?: NodeJS.Timeout;
-  private rechecks = 0;
-  /** What each device of the account was last reported as needing, so that it is logged once. */
-  private readonly troubles = new Map<string, string>();
   private readonly announcedZones = new Set<number>();
   private server?: SiaServer;
   private hub?: HubAccessory;
@@ -128,7 +117,6 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
   private stop(): void {
     clearInterval(this.watchdog);
     clearInterval(this.cloudSync);
-    clearTimeout(this.recheck);
     clearTimeout(this.verify);
     this.hub?.dispose();
     this.zones.forEach((zone) => zone.dispose());
@@ -226,7 +214,6 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
         const devices = await attempt(() => controller.devices());
         store.save(client.current, identity);
         this.applyDevices(config, model, devices);
-        this.scheduleRecheck(devices, readDevices);
       } catch (error) {
         if (!stopped) {
           this.log.warn(`Could not read the devices from Ajax: ${describe(error)}`);
@@ -307,55 +294,6 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     }
   }
 
-  /**
-   * The hub is reported as faulty when the account says it is offline or in malfunction. The other devices that
-   * are not exposed (sirens, keypads, keyfobs, range extenders) only get a line in the log when they need attention,
-   * once for each time they do.
-   */
-  private watchOthers(model: AjaxModel, devices: CloudDevice[]): void {
-    for (const device of devices) {
-      const trouble = [
-        !device.online ? 'offline' : '',
-        device.malfunction ? 'in malfunction' : '',
-        device.batteryLow ? `low on battery (${device.batteryPercent ?? '?'}%)` : '',
-        device.tampered ? 'opened' : '',
-      ].filter(Boolean).join(', ');
-
-      if (device.family?.startsWith('hub')) {
-        model.setCloudFault(!device.online || device.malfunction);
-      }
-      const known = this.troubles.get(device.id);
-      if (trouble === (known ?? '')) {
-        continue;
-      }
-      if (trouble) {
-        this.troubles.set(device.id, trouble);
-        if (!sensorKind(device.family)) {
-          this.log.warn(`${device.name} is ${trouble}`);
-        }
-      } else {
-        this.troubles.delete(device.id);
-        if (!sensorKind(device.family)) {
-          this.log.info(`${device.name} is back to normal`);
-        }
-      }
-    }
-  }
-
-  /** While a device needs attention, reads the account again in a couple of minutes, a few times at most. */
-  private scheduleRecheck(devices: CloudDevice[], readDevices: () => Promise<void>): void {
-    clearTimeout(this.recheck);
-    const attention = devices.some((device) => !device.bypassed && (!device.online || device.malfunction));
-    if (!attention) {
-      this.rechecks = 0;
-      return;
-    }
-    if (this.rechecks < MAX_RECHECKS) {
-      this.rechecks++;
-      this.recheck = setTimeout(() => void readDevices(), RECHECK_MS);
-    }
-  }
-
   private addZone(zone: ZoneAccessory): void {
     this.zones.push(zone);
     this.zoneByNumber.set(zone.zone, zone);
@@ -374,7 +312,6 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       const sensors = devices.filter((device) => sensorKind(device.family)).length;
       this.log.info(`Read ${devices.length} devices from your Ajax account (${sensors} detectors)`);
     }
-    this.watchOthers(model, devices);
     const listed = new Set<number>();
     const names = new Map<string, number>();
     for (const device of devices) {
@@ -454,7 +391,6 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       this.log.info(`Hub: ${hub.arm}${alarm}${hub.tampered ? ', tampered' : ''}${hub.fault ? ', fault' : ''}`);
     });
     model.on('ignored', (event) => this.log.debug(`Ignored event ${event.code}${event.zone !== undefined ? ` (zone ${event.zone})` : ''}`));
-    model.on('hubWarning', (message) => this.log.warn(message));
   }
 
   private announceUnknownZone(config: Config, code: string, zone: number | undefined): void {

@@ -161,7 +161,6 @@ SIA only listens. To arm, disarm and switch to night mode from Apple Home, and t
 - sends **Away**, **Night** and **Off** from the Home app, Siri and automations to the hub,
 - reads the real state at startup, after each command and every hour, so HomeKit is right even after a restart,
 - reads your **detectors** from the account: it shows their **battery level**, flags a detector that is **offline**, in **malfunction** or opened (**tamper**), and gives each its real **model and serial number**,
-- marks the alarm tile as faulty when the account says the **hub is offline** or in malfunction, and writes a line in the log when a **siren, keyfob or keypad** goes offline, runs low on battery or is opened,
 - adds a **temperature sensor** to the detectors that measure it (`temperatureSensors`). Unlike motion and contact sensors, Apple Home shows temperatures as tiles,
 - **finds the detectors you did not list** under `devices` and exposes them with the name they have in the Ajax app (`discoverDevices`). A detector you list keeps your own name. The number of a device in the Ajax app is its zone, which is how the two are matched,
 - keeps using SIA for instant events.

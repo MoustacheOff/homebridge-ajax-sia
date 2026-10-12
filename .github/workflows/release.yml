@@ -34,16 +34,6 @@ jobs:
             npm stage publish --provenance --access public
           fi
       - name: GitHub release
-        # The GitHub API sometimes answers 500 to a request that went through: look before trying again.
-        run: |
-          for attempt in 1 2 3; do
-            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-              echo "Release $GITHUB_REF_NAME exists"
-              exit 0
-            fi
-            gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag || true
-            sleep $((attempt * 5))
-          done
-          gh release view "$GITHUB_REF_NAME" >/dev/null
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes --verify-tag
         env:
           GH_TOKEN: ${{ github.token }}

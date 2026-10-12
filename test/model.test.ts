@@ -51,22 +51,6 @@ describe('AjaxModel', () => {
       expect(model.hub.arm).toBe('disarmed');
     });
 
-    it('tells the user when the hub could not activate night mode, without changing the state', () => {
-      const warnings: string[] = [];
-      model.on('hubWarning', (message) => warnings.push(message));
-      model.apply(ev('NE', undefined, 1));
-      expect(model.hub.arm).toBe('disarmed');
-      expect(warnings).toEqual(['The hub reports that night mode could not be activated']);
-    });
-
-    it('warns about a duress code', () => {
-      const warnings: string[] = [];
-      model.on('hubWarning', (message) => warnings.push(message));
-      model.apply(ev('NL', undefined, 1));
-      model.apply(ev('ND', undefined, 1));
-      expect(warnings).toEqual(['Night mode was turned off with a duress code']);
-    });
-
     it('prefers night mode over a plain armed state', () => {
       model.apply(ev('CG', undefined, 1));
       model.apply(ev('NL', undefined, 1));
@@ -129,16 +113,6 @@ describe('AjaxModel', () => {
       model.apply(ev('BR', 12));
       expect(model.hub.alarm).toBe(false);
       expect(model.zone(12).intrusion).toBe(false);
-    });
-
-    it('treats a verified burglary as an alarm of the hub, whose number is an area and not a detector', () => {
-      model.apply(ev('BV', 3, 1));
-      expect(model.hub.alarm).toBe(true);
-      expect(model.zone(3).intrusion).toBe(false);
-      expect(zoneUpdates).toEqual([]);
-
-      model.apply(ev('OP', 501, 1));
-      expect(model.hub.alarm).toBe(false);
     });
 
     it('keeps the alarm while another zone is still tripped', () => {
@@ -238,23 +212,6 @@ describe('AjaxModel', () => {
     });
   });
 
-  it('reports a fault while the account says the hub is offline', () => {
-    model.setCloudFault(true);
-    expect(model.hub.fault).toBe(true);
-    expect(hubUpdates.at(-1)?.fault).toBe(true);
-    model.setCloudFault(true);
-    expect(hubUpdates).toHaveLength(1);
-    model.setCloudFault(false);
-    expect(model.hub.fault).toBe(false);
-  });
-
-  it('keeps the fault of a silent hub when the account says it is fine', () => {
-    model.setOffline(true);
-    model.setCloudFault(true);
-    model.setCloudFault(false);
-    expect(model.hub.fault).toBe(true);
-  });
-
   it('reports events it does not understand', () => {
     const ignored: string[] = [];
     model.on('ignored', (event) => ignored.push(event.code));
@@ -266,8 +223,6 @@ describe('AjaxModel', () => {
     expect(isZoneCode('BA')).toBe(true);
     expect(isZoneCode('XT')).toBe(true);
     expect(isZoneCode('CL')).toBe(false);
-    // "Burglary verified" carries an area, not a detector.
-    expect(isZoneCode('BV')).toBe(false);
   });
 });
 

@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Removed
+
+- The alarm tile is no longer marked as faulty when the Ajax account reports the hub offline or in malfunction (1.1.0), nor read again after two minutes (1.1.1): Ajax reports a passing malfunction at every restart of Homebridge, and the plugin cannot tell it from a real one. The log no longer lists the sirens, keyfobs and keypads that need attention.
+- The special handling of the verified burglary code `BV` and the log lines for `NE` and for duress codes (1.1.0): they came from a table of SIA codes and were never seen on a real hub. The release workflow is back to a single `gh release create`.
+
 ## [1.1.1] - 2026-10-12
 
 ### Fixed

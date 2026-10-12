@@ -37,8 +37,6 @@ interface ModelEvents {
   alarm: [number, AlarmKind];
   /** Fired for every event the model has no use for, so it can be logged for troubleshooting. */
   ignored: [SiaEvent];
-  /** Something the user should know that does not change the state: worth a line in the log. */
-  hubWarning: [string];
 }
 
 /** Zone reserved for the hub itself: tamper, battery and mains events carry no zone, or zone 0. */
@@ -71,17 +69,7 @@ const CLEARED_BY_DISARM = new Set<AlarmKind>(['intrusion', 'panic']);
 /** Alarm kinds that make the hub itself report "alarm triggered". Leaks are shown on the leak sensor only. */
 const HUB_ALARMS = new Set<AlarmKind>(['intrusion', 'fire', 'gas', 'panic']);
 
-/**
- * Alarm codes that are about an area, not a detector: SIA says the zone is "not sent", so a number after
- * the code is the area, and the alarm belongs to the hub alone.
- */
-const AREA_ALARMS: ReadonlySet<string> = new Set(['BV']);
-
-const ZONE_CODES = new Set([
-  ...Object.keys(ALARMS).filter((code) => !AREA_ALARMS.has(code)),
-  ...Object.keys(RESTORES),
-  'TA', 'TR', 'XT', 'XR',
-]);
+const ZONE_CODES = new Set([...Object.keys(ALARMS), ...Object.keys(RESTORES), 'TA', 'TR', 'XT', 'XR']);
 
 /** Whether the number that follows this code is a zone (as opposed to a user, for instance). */
 export const isZoneCode = (code: string): boolean => ZONE_CODES.has(code);
@@ -98,8 +86,6 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
   private readonly armedAreas = new Set<number>();
   private night = false;
   private offline = false;
-  /** The Ajax account reports the hub offline or in malfunction. */
-  private cloudFault = false;
   private hubTampered = false;
   private readonly hubFaults = new Set<string>();
   private readonly alarms = new Map<string, AlarmKind>();
@@ -125,7 +111,7 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
       arm,
       alarm: [...this.alarms.values()].some((kind) => HUB_ALARMS.has(kind)),
       tampered: this.hubTampered,
-      fault: this.offline || this.cloudFault || this.hubFaults.size > 0,
+      fault: this.offline || this.hubFaults.size > 0,
     };
   }
 
@@ -158,14 +144,6 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
     this.publishHub();
   }
 
-  /** The Ajax account says the hub is offline or in malfunction (or no longer says so). Surfaced as a fault. */
-  setCloudFault(fault: boolean): void {
-    if (this.cloudFault !== fault) {
-      this.cloudFault = fault;
-      this.publishHub();
-    }
-  }
-
   /** Mark the hub as silent (or back). Surfaced as a fault. */
   setOffline(offline: boolean): void {
     if (this.offline !== offline) {
@@ -188,11 +166,6 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
     } else if (NIGHT_OFF_CODES.has(code)) {
       this.night = false;
       this.publishHub();
-      if (code === 'ND') {
-        this.emit('hubWarning', 'Night mode was turned off with a duress code');
-      }
-    } else if (code === 'NE') {
-      this.emit('hubWarning', 'The hub reports that night mode could not be activated');
     } else if (code in ALARMS) {
       this.raise(ALARMS[code]!, event);
     } else if (code in RESTORES) {
@@ -232,11 +205,10 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
   }
 
   private raise(kind: AlarmKind, event: SiaEvent): void {
-    const zone = AREA_ALARMS.has(event.code) ? undefined : event.zone;
-    this.alarms.set(`${kind}:${zone ?? HUB_ZONE}`, kind);
-    if (zone !== undefined && zone !== HUB_ZONE && kind !== 'panic') {
-      this.updateZone(zone, { [kind]: true });
-      this.emit('alarm', zone, kind);
+    this.alarms.set(`${kind}:${event.zone ?? HUB_ZONE}`, kind);
+    if (event.zone !== undefined && event.zone !== HUB_ZONE && kind !== 'panic') {
+      this.updateZone(event.zone, { [kind]: true });
+      this.emit('alarm', event.zone, kind);
     }
     this.publishHub();
   }
