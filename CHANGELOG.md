@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-12
+
+### Fixed
+
+- A fault reported by the Ajax account (for example the hub that lost the monitoring station for a moment while Homebridge restarted) stayed on the alarm tile until the next hourly check. The account is now read again after two minutes, up to five times, as long as a device needs attention, and the fault is cleared as soon as it is gone.
+
 ## [1.1.0] - 2026-10-12
 
 ### Added
@@ -61,7 +67,8 @@ First release.
   - The plugin names itself `Homebridge`, with the operating system it runs on (read from the machine, for example `Debian GNU/Linux bookworm 12.15 aarch64` or `macOS 27.0.1`), in the list of sessions of the Ajax account, and renames its session when that name changes.
 - `scripts/probe.mjs`, a read-only check of an Ajax account that ends its session when it exits.
 
-[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.0...v1.0.1
