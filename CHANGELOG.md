@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-12
+
 ### Added
 
 - With the Ajax account connected, the detectors show their **battery level**, are flagged when **offline**, in **malfunction** or opened, and carry their real **model and serial number**.
@@ -59,7 +61,8 @@ First release.
   - The plugin names itself `Homebridge`, with the operating system it runs on (read from the machine, for example `Debian GNU/Linux bookworm 12.15 aarch64` or `macOS 27.0.1`), in the list of sessions of the Ajax account, and renames its session when that name changes.
 - `scripts/probe.mjs`, a read-only check of an Ajax account that ends its session when it exits.
 
-[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/MoustacheOff/homebridge-ajax-sia/releases/tag/v1.0.0
