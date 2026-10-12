@@ -40,9 +40,9 @@ export class ZoneAccessory {
 
   constructor(
     private readonly api: API,
-    private readonly accessory: PlatformAccessory<ZoneContext>,
+    accessory: PlatformAccessory<ZoneContext>,
     private readonly device: DeviceConfig,
-    private readonly model: AjaxModel,
+    model: AjaxModel,
     private readonly motionResetSeconds: number,
   ) {
     const { Service, Characteristic } = api.hap;

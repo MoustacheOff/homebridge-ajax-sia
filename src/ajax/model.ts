@@ -67,7 +67,17 @@ const CLEARED_BY_DISARM = new Set<AlarmKind>(['intrusion', 'panic']);
 /** Alarm kinds that make the hub itself report "alarm triggered". Leaks are shown on the leak sensor only. */
 const HUB_ALARMS = new Set<AlarmKind>(['intrusion', 'fire', 'gas', 'panic']);
 
-const ZONE_CODES = new Set([...Object.keys(ALARMS), ...Object.keys(RESTORES), 'TA', 'TR', 'XT', 'XR']);
+/**
+ * Alarm codes that are about an area, not a detector: SIA says the zone is "not sent", so a number after
+ * the code is the area, and the alarm belongs to the hub alone.
+ */
+const AREA_ALARMS: ReadonlySet<string> = new Set(['BV']);
+
+const ZONE_CODES = new Set([
+  ...Object.keys(ALARMS).filter((code) => !AREA_ALARMS.has(code)),
+  ...Object.keys(RESTORES),
+  'TA', 'TR', 'XT', 'XR',
+]);
 
 /** Whether the number that follows this code is a zone (as opposed to a user, for instance). */
 export const isZoneCode = (code: string): boolean => ZONE_CODES.has(code);
@@ -203,10 +213,11 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
   }
 
   private raise(kind: AlarmKind, event: SiaEvent): void {
-    this.alarms.set(`${kind}:${event.zone ?? HUB_ZONE}`, kind);
-    if (event.zone !== undefined && event.zone !== HUB_ZONE && kind !== 'panic') {
-      this.updateZone(event.zone, { [kind]: true });
-      this.emit('alarm', event.zone, kind);
+    const zone = AREA_ALARMS.has(event.code) ? undefined : event.zone;
+    this.alarms.set(`${kind}:${zone ?? HUB_ZONE}`, kind);
+    if (zone !== undefined && zone !== HUB_ZONE && kind !== 'panic') {
+      this.updateZone(zone, { [kind]: true });
+      this.emit('alarm', zone, kind);
     }
     this.publishHub();
   }
