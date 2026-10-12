@@ -9,7 +9,9 @@ import type { PlatformConfig } from 'homebridge';
 import { Message, Writer } from '../src/cloud/protobuf.js';
 import { AjaxSiaPlatform } from '../src/platform.js';
 import { PLATFORM_NAME } from '../src/settings.js';
+import { battery, hubDevice, snapshot, temperature } from './cloud/deviceFixtures.js';
 import { FakeGrpcServer, type Call, type Reply } from './cloud/fakeGrpc.js';
+import { GrpcStatus } from '../src/cloud/grpc.js';
 import { createApi, createLog, freePort } from './fakeHomebridge.js';
 import { ACCOUNT, hubMessage } from './helpers.js';
 
@@ -49,9 +51,14 @@ afterEach(async () => {
   await cloud.stop();
 });
 
-async function launch(settings: Record<string, unknown> = {}, seed?: unknown) {
+async function launch(
+  settings: Record<string, unknown> = {},
+  seed?: unknown,
+  platformSettings: Record<string, unknown> = {},
+  cached: unknown[] = [],
+) {
   const origin = await cloud.start();
-  const { api, emit, registered, storage } = createApi();
+  const { api, emit, registered, unregistered, storage } = createApi();
   if (seed) {
     writeFileSync(join(storage, 'homebridge-ajax-sia-cloud.json'), JSON.stringify(seed));
   }
@@ -66,16 +73,20 @@ async function launch(settings: Record<string, unknown> = {}, seed?: unknown) {
     protocol: 'tcp',
     maxTimeSkewSeconds: 0,
     cloud: { email: 'me@example.com', password: 'hunter2', host: origin, syncIntervalMinutes: 0, ...settings },
+    ...platformSettings,
   } as PlatformConfig;
 
-  new AjaxSiaPlatform(log, config, api);
+  const platform = new AjaxSiaPlatform(log, config, api);
+  cached.forEach((accessory) => platform.configureAccessory(accessory as never));
   shutdown = () => emit('shutdown');
   emit('didFinishLaunching');
   await vi.waitFor(() => expect(messages.info.some((line) => line.includes('Listening'))).toBe(true));
 
-  const hub = registered[0]!;
+  const hub = [...registered, ...cached as typeof registered].find((accessory) => accessory.getService(Service.SecuritySystem))!;
   const service = hub.getService(Service.SecuritySystem)!;
   return {
+    registered,
+    unregistered,
     port,
     storage,
     messages,
@@ -176,6 +187,127 @@ describe('AjaxSiaPlatform with commands enabled', () => {
     handlers['LoginByPasswordService/execute'] = () => ({ status: 7, text: 'Request is blacklisted' });
     const { messages } = await launch();
     await vi.waitFor(() => expect(messages.warn.some((line) => line.includes('clientVersion'))).toBe(true));
+  });
+});
+
+describe('AjaxSiaPlatform with the devices of the Ajax account', () => {
+  const STREAM = 'StreamLightDevicesService/execute';
+  const MOTION = 2;
+  const DOOR = 4;
+  const SIREN = 31;
+  const HUB = 114;
+  const named = (registered: { displayName: string }[]) => registered.map((accessory) => accessory.displayName);
+  const devicesRead = () => cloud.calls.filter((call) => call.path.endsWith(STREAM)).length;
+
+  const detectors = [
+    { zone: 1, name: 'Living room', type: 'motion' },
+    { zone: 2, name: 'Front door', type: 'contact' },
+  ];
+  const level = (accessory: { getService: (service: never) => { getCharacteristic: (c: never) => { value: unknown } } | undefined }) =>
+    accessory.getService(Service.Battery as never)?.getCharacteristic(Characteristic.BatteryLevel as never).value;
+
+  beforeEach(() => {
+    handlers[STREAM] = () => ({
+      stream: [snapshot(
+        hubDevice({ id: 'D1', name: 'MotionProtect Plus', index: 1, type: MOTION, statuses: [battery(1, 55), temperature(21)] }),
+        hubDevice({ id: 'D2', name: 'DoorProtect Plus', index: 2, type: DOOR, states: [9], statuses: [battery(3, 7)] }),
+      )],
+    });
+  });
+
+  it('gives each detector the user listed what the account says about it, matched by its number', async () => {
+    const { registered } = await launch({}, undefined, { devices: detectors });
+    await vi.waitFor(() => expect(devicesRead()).toBe(1));
+
+    const room = registered.find((accessory) => accessory.displayName === 'Living room')!;
+    const door = registered.find((accessory) => accessory.displayName === 'Front door')!;
+    await vi.waitFor(() => expect(level(room)).toBe(55));
+    expect(level(door)).toBe(7);
+    expect(door.getService(Service.ContactSensor)!.getCharacteristic(Characteristic.StatusFault).value).toBe(1);
+    const thermometer = room.getServiceById(Service.TemperatureSensor, 'temperature')!;
+    expect(thermometer.getCharacteristic(Characteristic.CurrentTemperature).value).toBe(21);
+    expect(named(registered)).not.toContain('MotionProtect Plus');
+  });
+
+  it('opens a single session at startup, although it reads both the state and the devices', async () => {
+    await launch({}, undefined, { devices: detectors });
+    await vi.waitFor(() => expect(devicesRead()).toBe(1));
+    expect(cloud.calls.filter((call) => call.path.endsWith('LoginByPasswordService/execute'))).toHaveLength(1);
+  });
+
+  it('exposes the detectors the user did not list, and nothing else', async () => {
+    handlers[STREAM] = () => ({
+      stream: [snapshot(
+        hubDevice({ name: 'Hub 2 (4G)', index: 0, type: HUB }),
+        hubDevice({ name: 'DoorProtect Plus', index: 1, type: DOOR }),
+        hubDevice({ name: 'MotionProtect Plus', index: 2, type: MOTION }),
+        hubDevice({ name: 'MotionProtect Plus', index: 3, type: MOTION }),
+        hubDevice({ name: 'StreetSiren', index: 5, type: SIREN }),
+        hubDevice({ name: 'Mystery', index: 6, type: 9999 }),
+      )],
+    });
+    const { registered, messages } = await launch();
+    await vi.waitFor(() => expect(named(registered).length).toBe(4));
+
+    expect(named(registered).sort()).toEqual(['Ajax', 'DoorProtect Plus', 'MotionProtect Plus 2', 'MotionProtect Plus 3']);
+    expect(messages.info.some((line) => line.includes('Found MotionProtect Plus (zone 2)'))).toBe(true);
+  });
+
+  it('makes the discovered detectors react to what the hub reports', async () => {
+    handlers[STREAM] = () => ({ stream: [snapshot(hubDevice({ name: 'Garage', index: 2, type: MOTION }))] });
+    const { registered, port } = await launch();
+    await vi.waitFor(() => expect(named(registered)).toContain('Garage'));
+
+    await hubSends(port, 'Nri1/BA2');
+    const garage = registered.find((accessory) => accessory.displayName === 'Garage')!;
+    expect(garage.getService(Service.MotionSensor)!.getCharacteristic(Characteristic.MotionDetected).value).toBe(true);
+  });
+
+  it('keeps the name the user gave, and does not add the detector a second time', async () => {
+    const { registered } = await launch({}, undefined, { devices: [{ zone: 1, name: 'Mouvement salon', type: 'motion' }] });
+    await vi.waitFor(() => expect(devicesRead()).toBe(1));
+    await vi.waitFor(() => expect(named(registered)).toContain('DoorProtect Plus'));
+    expect(named(registered).filter((name) => /Mouvement salon|MotionProtect Plus/.test(name))).toEqual(['Mouvement salon']);
+  });
+
+  it('adds nothing when the user turned discovery off, but still reports on the listed detectors', async () => {
+    const { registered } = await launch({ discoverDevices: false }, undefined, { devices: [detectors[0]] });
+    await vi.waitFor(() => expect(devicesRead()).toBe(1));
+    const room = registered.find((accessory) => accessory.displayName === 'Living room')!;
+    await vi.waitFor(() => expect(level(room)).toBe(55));
+    expect(named(registered).sort()).toEqual(['Ajax', 'Living room']);
+  });
+
+  it('adds no temperature sensor when the user turned it off', async () => {
+    const { registered } = await launch({ temperatureSensors: false }, undefined, { devices: [detectors[0]] });
+    const room = registered.find((accessory) => accessory.displayName === 'Living room')!;
+    await vi.waitFor(() => expect(level(room)).toBe(55));
+    expect(room.getServiceById(Service.TemperatureSensor, 'temperature')).toBeUndefined();
+  });
+
+  it('keeps the discovered detectors across a restart, and forgets the ones that left the account', async () => {
+    handlers[STREAM] = () => ({
+      stream: [snapshot(hubDevice({ name: 'Garage', index: 2, type: MOTION }), hubDevice({ name: 'Cave', index: 3, type: DOOR }))],
+    });
+    const first = await launch();
+    await vi.waitFor(() => expect(named(first.registered).sort()).toEqual(['Ajax', 'Cave', 'Garage']));
+    const known = [...first.registered];
+    shutdown?.();
+    cloud.calls.length = 0;
+
+    // Second start, with the same accessories in the cache and one detector gone from the account.
+    handlers[STREAM] = () => ({ stream: [snapshot(hubDevice({ name: 'Garage', index: 2, type: MOTION }))] });
+    const second = await launch({}, undefined, {}, known);
+    await vi.waitFor(() => expect(named(second.unregistered)).toEqual(['Cave']));
+    expect(named(second.registered)).not.toContain('Garage');
+  });
+
+  it('keeps the detectors it knows when the account cannot be read', async () => {
+    handlers[STREAM] = () => ({ status: GrpcStatus.UNAVAILABLE, text: 'down' });
+    const first = await launch({}, undefined, { devices: detectors });
+    await vi.waitFor(() => expect(first.messages.warn.some((line) => line.includes('Could not read the devices'))).toBe(true));
+    expect(named(first.registered).sort()).toEqual(['Ajax', 'Front door', 'Living room']);
+    expect(first.unregistered).toEqual([]);
   });
 });
 

@@ -3,8 +3,9 @@ import type { API, DynamicPlatformPlugin, Logging, PlatformAccessory, PlatformCo
 import { HubAccessory, type Commander, type HubContext } from './accessories/hub.js';
 import { ZoneAccessory, type ZoneContext } from './accessories/zone.js';
 import { AjaxModel, isZoneCode } from './ajax/model.js';
-import { AjaxCloud, CloudError, sha256, type FailureReason } from './cloud/ajax.js';
+import { AjaxCloud, CloudError, sha256, type CloudDevice, type FailureReason } from './cloud/ajax.js';
 import { CloudController } from './cloud/controller.js';
+import { sensorKind } from './cloud/deviceTypes.js';
 import { GrpcChannel } from './cloud/grpc.js';
 import { CloudStore } from './cloud/store.js';
 import { parseConfig, type Config } from './config.js';
@@ -21,6 +22,13 @@ const FATAL: ReadonlySet<FailureReason> = new Set<FailureReason>([
   'invalid-credentials', 'account-locked', 'account-not-confirmed', 'two-factor-required', 'client-rejected',
 ]);
 
+/** What the cloud connection gives the rest of the plugin. */
+interface CloudLink {
+  commander: Commander;
+  /** Reads the devices of the account and hands them to the accessories. */
+  readDevices: () => Promise<void>;
+}
+
 /** After a command, check what the hub actually did, in case the SIA event is late or not configured. */
 const VERIFY_DELAY_MS = 6_000;
 
@@ -31,6 +39,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
   private readonly config?: Config;
   private readonly cached = new Map<string, PlatformAccessory>();
   private readonly zones: ZoneAccessory[] = [];
+  private readonly zoneByNumber = new Map<number, ZoneAccessory>();
   private readonly announcedZones = new Set<number>();
   private server?: SiaServer;
   private hub?: HubAccessory;
@@ -64,8 +73,9 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     const config = this.config!;
     const model = new AjaxModel(config.areas);
 
-    const commander = this.setupCloud(config, model);
-    this.setupAccessories(config, model, commander);
+    const cloud = this.setupCloud(config, model);
+    this.setupAccessories(config, model, cloud?.commander);
+    void cloud?.readDevices();
     this.observe(model);
 
     const receiver = new SiaReceiver({
@@ -114,9 +124,9 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
 
   /**
    * Enables commands from HomeKit when the Ajax account is configured. Returns the function that carries
-   * them out, or `undefined` when the plugin stays receive-only.
+   * them out and the one that reads the devices, or `undefined` when the plugin stays receive-only.
    */
-  private setupCloud(config: Config, model: AjaxModel): Commander | undefined {
+  private setupCloud(config: Config, model: AjaxModel): CloudLink | undefined {
     const settings = config.cloud;
     if (!settings) {
       return undefined;
@@ -157,7 +167,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     this.log.warn('Commands from HomeKit are enabled. They use the protocol of the Ajax mobile apps, which is not an official API.');
 
     let stopped: string | undefined;
-    const attempt = async <T>(task: () => Promise<T>): Promise<T> => {
+    const run = async <T>(task: () => Promise<T>): Promise<T> => {
       await migrated;
       if (stopped) {
         throw new Error(stopped);
@@ -171,6 +181,13 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
         }
         throw error;
       }
+    };
+    // One call at a time: two at once, with no session yet, would both log in and leave two sessions in the account.
+    let queue: Promise<unknown> = Promise.resolve();
+    const attempt = <T>(task: () => Promise<T>): Promise<T> => {
+      const result = queue.then(() => run(task));
+      queue = result.catch(() => undefined);
+      return result;
     };
 
     const sync = async (): Promise<void> => {
@@ -188,12 +205,27 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       }
     };
 
+    const readDevices = async (): Promise<void> => {
+      if (stopped) {
+        return;
+      }
+      try {
+        const devices = await attempt(() => controller.devices());
+        store.save(client.current, identity);
+        this.applyDevices(config, model, devices);
+      } catch (error) {
+        if (!stopped) {
+          this.log.warn(`Could not read the devices from Ajax: ${describe(error)}`);
+        }
+      }
+    };
+
     void sync();
     if (settings.syncIntervalMinutes > 0) {
-      this.cloudSync = setInterval(() => void sync(), settings.syncIntervalMinutes * 60_000);
+      this.cloudSync = setInterval(() => void sync().then(readDevices), settings.syncIntervalMinutes * 60_000);
     }
 
-    return async (target, current) => {
+    const commander: Commander = async (target, current) => {
       try {
         await attempt(() => controller.command(target, current));
         store.save(client.current, identity);
@@ -205,6 +237,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       clearTimeout(this.verify);
       this.verify = setTimeout(() => void sync(), VERIFY_DELAY_MS);
     };
+    return { commander, readDevices };
   }
 
   private setupAccessories(config: Config, model: AjaxModel, commander?: Commander): void {
@@ -219,6 +252,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     }
     this.hub = new HubAccessory(this.api, hub, model, commander, config.hub);
 
+    const temperature = config.cloud?.temperatureSensors ?? false;
     for (const device of config.devices) {
       const uuid = hap.uuid.generate(`ajax-sia:zone:${config.accountId}:${device.zone}`);
       wanted.add(uuid);
@@ -229,14 +263,98 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
         this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [previous]);
         this.cached.delete(uuid);
       }
-      const accessory = this.obtain<ZoneContext>(uuid, device.name, hap.Categories.SENSOR, { zone: device.zone, type: device.type });
-      this.zones.push(new ZoneAccessory(this.api, accessory, device, model, config.motionResetSeconds));
+      const accessory = this.obtain<ZoneContext>(
+        uuid,
+        device.name,
+        hap.Categories.SENSOR,
+        { zone: device.zone, type: device.type, discovered: false },
+      );
+      this.addZone(new ZoneAccessory(this.api, accessory, device, model, config.motionResetSeconds, { temperature }));
+    }
+
+    // Detectors found in the Ajax account earlier stay where they were while the account is not asked again:
+    // removing and re-adding them at every restart would lose their room and their automations in Apple Home.
+    if (config.cloud?.discoverDevices) {
+      for (const accessory of this.cached.values() as IterableIterator<PlatformAccessory<ZoneContext>>) {
+        const { zone, type, discovered } = accessory.context;
+        if (!discovered || wanted.has(accessory.UUID) || !zone || !type) {
+          continue;
+        }
+        wanted.add(accessory.UUID);
+        const device = { zone, type, name: accessory.displayName };
+        this.addZone(new ZoneAccessory(this.api, accessory, device, model, config.motionResetSeconds, { temperature }));
+      }
     }
 
     const stale = [...this.cached.values()].filter((accessory) => !wanted.has(accessory.UUID));
     if (stale.length > 0) {
       this.log.info(`Removing ${stale.length} accessory(ies) no longer configured`);
       this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, stale);
+    }
+  }
+
+  private addZone(zone: ZoneAccessory): void {
+    this.zones.push(zone);
+    this.zoneByNumber.set(zone.zone, zone);
+  }
+
+  /**
+   * Hands what the Ajax account says about each detector to the matching accessory. The number of a device on
+   * the hub is the zone SIA reports it with, so that is how they are matched. Detectors the user did not list
+   * are exposed too, when asked to, and forgotten when they leave the account.
+   */
+  private applyDevices(config: Config, model: AjaxModel, devices: CloudDevice[]): void {
+    const settings = config.cloud;
+    const { hap } = this.api;
+    const listed = new Set<number>();
+    const names = new Map<string, number>();
+    for (const device of devices) {
+      names.set(device.name, (names.get(device.name) ?? 0) + 1);
+    }
+
+    for (const device of devices) {
+      if (device.index <= 0) {
+        continue;
+      }
+      listed.add(device.index);
+
+      const known = this.zoneByNumber.get(device.index);
+      if (known) {
+        known.applyCloud(device);
+        continue;
+      }
+      const type = sensorKind(device.family);
+      if (!settings?.discoverDevices || !type) {
+        continue;
+      }
+
+      // Two detectors of the same kind have the same name in the Ajax app: their number tells them apart.
+      const name = (names.get(device.name) ?? 0) > 1 ? `${device.name} ${device.index}` : device.name;
+      const uuid = hap.uuid.generate(`ajax-sia:zone:${config.accountId}:${device.index}`);
+      const accessory = this.obtain<ZoneContext>(uuid, name, hap.Categories.SENSOR, { zone: device.index, type, discovered: true });
+      const options = { temperature: settings.temperatureSensors };
+      const zone = new ZoneAccessory(this.api, accessory, { zone: device.index, name, type }, model, config.motionResetSeconds, options);
+      this.addZone(zone);
+      zone.applyCloud(device);
+      this.log.info(`Found ${device.name} (zone ${device.index}) in your Ajax account: exposed as "${name}"`);
+    }
+
+    if (!settings?.discoverDevices) {
+      return;
+    }
+    const gone = [...this.zoneByNumber.values()].filter((zone) => {
+      const accessory = this.cached.get(this.api.hap.uuid.generate(`ajax-sia:zone:${config.accountId}:${zone.zone}`));
+      return (accessory?.context as ZoneContext | undefined)?.discovered === true && !listed.has(zone.zone);
+    });
+    for (const zone of gone) {
+      const uuid = hap.uuid.generate(`ajax-sia:zone:${config.accountId}:${zone.zone}`);
+      const accessory = this.cached.get(uuid)!;
+      this.log.info(`${accessory.displayName} (zone ${zone.zone}) is no longer in your Ajax account: removing it`);
+      zone.dispose();
+      this.zones.splice(this.zones.indexOf(zone), 1);
+      this.zoneByNumber.delete(zone.zone);
+      this.cached.delete(uuid);
+      this.api.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
     }
   }
 

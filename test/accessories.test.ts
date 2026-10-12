@@ -5,6 +5,7 @@ import type { PlatformAccessory, Service as HbService } from 'homebridge';
 import { HubAccessory, type HubContext } from '../src/accessories/hub.js';
 import { ZoneAccessory, type ZoneContext } from '../src/accessories/zone.js';
 import { AjaxModel } from '../src/ajax/model.js';
+import type { CloudDevice } from '../src/cloud/ajax.js';
 import type { DeviceConfig, ZoneType } from '../src/config.js';
 import { createApi } from './fakeHomebridge.js';
 
@@ -185,6 +186,112 @@ describe('ZoneAccessory', () => {
       vi.advanceTimersByTime(60_000);
       expect(motion(handle.accessory)).toBe(1);
     });
+  });
+});
+
+describe('ZoneAccessory with what the Ajax account says', () => {
+  const info = (extra: Partial<CloudDevice> = {}): CloudDevice => ({
+    id: '30E2CDA8',
+    hubId: 'hub-1',
+    name: 'MotionProtect Plus',
+    index: 3,
+    family: 'motion_protect_plus',
+    online: true,
+    bypassed: false,
+    malfunction: false,
+    tampered: false,
+    batteryPercent: 87,
+    batteryLow: false,
+    temperature: 21,
+    ...extra,
+  });
+
+  function sensor(device: Partial<DeviceConfig> = {}, options: { temperature?: boolean } = { temperature: true }) {
+    const { api, FakeAccessory } = createApi();
+    const model = new AjaxModel();
+    const accessory = new FakeAccessory('Salon', hap.uuid.generate('zone3')) as unknown as PlatformAccessory<ZoneContext>;
+    accessory.context = { zone: 3, type: 'motion' };
+    const zone = new ZoneAccessory(api, accessory, { zone: 3, name: 'Salon', type: 'motion', ...device }, model, 30, options);
+    const read = (service: ServiceRef, characteristic: CharacteristicRef, subtype?: string) =>
+      (subtype ? accessory.getServiceById(service, subtype) : accessory.getService(service))?.getCharacteristic(characteristic)?.value;
+    return { zone, accessory, model, read };
+  }
+
+  it('is not at fault until the account says so', () => {
+    const { read } = sensor();
+    expect(read(Service.MotionSensor, Characteristic.StatusFault)).toBe(0);
+  });
+
+  it.each([
+    ['offline', { online: false }],
+    ['in malfunction', { malfunction: true }],
+  ])('reports a detector that is %s as at fault', (_label, extra) => {
+    const { zone, read } = sensor();
+    zone.applyCloud(info(extra));
+    expect(read(Service.MotionSensor, Characteristic.StatusFault)).toBe(1);
+    zone.applyCloud(info());
+    expect(read(Service.MotionSensor, Characteristic.StatusFault)).toBe(0);
+  });
+
+  it('shows the battery level of the account, and a low battery from either source', () => {
+    const { zone, model, read } = sensor();
+    zone.applyCloud(info({ batteryPercent: 87 }));
+    expect(read(Service.Battery, Characteristic.BatteryLevel)).toBe(87);
+    expect(read(Service.Battery, Characteristic.ChargingState)).toBe(Characteristic.ChargingState.NOT_CHARGEABLE);
+    expect(read(Service.MotionSensor, Characteristic.StatusLowBattery)).toBe(0);
+
+    zone.applyCloud(info({ batteryPercent: 9, batteryLow: true }));
+    expect(read(Service.Battery, Characteristic.StatusLowBattery)).toBe(1);
+    expect(read(Service.MotionSensor, Characteristic.StatusLowBattery)).toBe(1);
+
+    zone.applyCloud(info({ batteryPercent: 80, batteryLow: false }));
+    model.apply({ code: 'XT', zone: 3 });
+    expect(read(Service.MotionSensor, Characteristic.StatusLowBattery)).toBe(1);
+  });
+
+  it('shows a detector that the account sees opened as tampered', () => {
+    const { zone, read } = sensor();
+    zone.applyCloud(info({ tampered: true }));
+    expect(read(Service.MotionSensor, Characteristic.StatusTampered)).toBe(1);
+  });
+
+  it('adds a temperature sensor, which Apple Home shows as a tile', () => {
+    const { zone, read } = sensor();
+    zone.applyCloud(info({ temperature: 21 }));
+    expect(read(Service.TemperatureSensor, Characteristic.CurrentTemperature, 'temperature')).toBe(21);
+    zone.applyCloud(info({ temperature: -4 }));
+    expect(read(Service.TemperatureSensor, Characteristic.CurrentTemperature, 'temperature')).toBe(-4);
+  });
+
+  it('adds no temperature sensor when the user does not want one, or the detector has none', () => {
+    const off = sensor({}, { temperature: false });
+    off.zone.applyCloud(info());
+    expect(off.accessory.getServiceById(Service.TemperatureSensor, 'temperature')).toBeUndefined();
+
+    const none = sensor();
+    none.zone.applyCloud(info({ temperature: undefined }));
+    expect(none.accessory.getServiceById(Service.TemperatureSensor, 'temperature')).toBeUndefined();
+  });
+
+  it('removes the temperature sensor and the battery that the account stops reporting', () => {
+    const { zone, accessory } = sensor();
+    zone.applyCloud(info());
+    expect(accessory.getService(Service.Battery)).toBeDefined();
+    zone.applyCloud(info({ temperature: undefined, batteryPercent: undefined }));
+    expect(accessory.getServiceById(Service.TemperatureSensor, 'temperature')).toBeUndefined();
+    expect(accessory.getService(Service.Battery)).toBeUndefined();
+  });
+
+  it('shows what the detector really is, unless the user said otherwise', () => {
+    const plain = sensor();
+    plain.zone.applyCloud(info());
+    expect(value(plain.accessory, Service.AccessoryInformation, Characteristic.Model)).toBe('Motion Protect Plus');
+    expect(value(plain.accessory, Service.AccessoryInformation, Characteristic.SerialNumber)).toBe('30E2CDA8');
+
+    const custom = sensor({ model: 'My model', serial: 'MY-1' });
+    custom.zone.applyCloud(info());
+    expect(value(custom.accessory, Service.AccessoryInformation, Characteristic.Model)).toBe('My model');
+    expect(value(custom.accessory, Service.AccessoryInformation, Characteristic.SerialNumber)).toBe('MY-1');
   });
 });
 
