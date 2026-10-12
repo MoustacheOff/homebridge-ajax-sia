@@ -14,7 +14,7 @@ For security issues, see [SECURITY.md](SECURITY.md) instead of opening a public 
 
 ## Development
 
-You need Node.js 22 or 24.
+You need Node.js 22, 24 or 26.
 
 ```sh
 npm install
