@@ -6,10 +6,15 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- With the Ajax account connected, the detectors show their **battery level**, are flagged when **offline**, in **malfunction** or opened, and carry their real **model and serial number**.
+- A **temperature sensor** is added to the detectors that measure it (`cloud.temperatureSensors`).
+- Detectors that are in the Ajax account but not in `devices` are **found and exposed** with their name in the Ajax app (`cloud.discoverDevices`); the ones that leave the account are removed.
+- The probe script (`scripts/probe.mjs`) lists the devices of each space.
 - A daily workflow looks up the latest release of the Ajax app on the App Store and proposes raising the default announced app version, in the code, the settings form and the README, so the default no longer waits for Ajax to retire the old one.
 
 ### Changed
 
+- Every call to the Ajax cloud now goes through a queue, so reading the state and the devices at startup opens one session, not two.
 - Night mode that the hub turns off by itself (`NO`, by its schedule) or with a duress code (`ND`) is now followed in HomeKit, instead of staying on Night until the next check. A refused night arming (`NE`) and a duress code are written to the log.
 - A verified burglary (`BV`) is treated as an alarm of the hub, as SIA defines it: the number that comes with it is an area, no longer mistaken for a detector.
 - The README mentions the per-channel IP addresses of OS Malevich 2.16.
