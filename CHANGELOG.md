@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-12
+
+### Fixed
+
+- Two links of the README pointed to the old title of the section on the Ajax account, and went nowhere.
+
 ### Removed
 
 - The alarm tile is no longer marked as faulty when the Ajax account reports the hub offline or in malfunction (1.1.0), nor read again after two minutes (1.1.1): Ajax reports a passing malfunction at every restart of Homebridge, and the plugin cannot tell it from a real one. The log no longer lists the sirens, keyfobs and keypads that need attention.
@@ -72,7 +78,8 @@ First release.
   - The plugin names itself `Homebridge`, with the operating system it runs on (read from the machine, for example `Debian GNU/Linux bookworm 12.15 aarch64` or `macOS 27.0.1`), in the list of sessions of the Ajax account, and renames its session when that name changes.
 - `scripts/probe.mjs`, a read-only check of an Ajax account that ends its session when it exits.
 
-[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.0.1...v1.0.2
