@@ -126,6 +126,12 @@ export class Message {
     return typeof value === 'bigint' ? Number(value) : 0;
   }
 
+  /** A signed 32-bit field: a negative number travels as a 64-bit varint. */
+  int32(field: number): number {
+    const value = this.fields.get(field)?.[0];
+    return typeof value === 'bigint' ? Number(BigInt.asIntN(32, value)) : 0;
+  }
+
   /** Every value of a repeated numeric field, whether the sender packed them into one block or not. */
   varints(field: number): number[] {
     const result: number[] = [];

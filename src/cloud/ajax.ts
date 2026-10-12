@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { GrpcChannel, GrpcError, GrpcStatus, type Metadata } from './grpc.js';
+import { familyName } from './deviceTypes.js';
 import { hostDescription } from './host.js';
 import { Message, Writer } from './protobuf.js';
 import { totp } from './totp.js';
@@ -20,6 +21,28 @@ export interface Space {
   name: string;
   state: SpaceState;
   online: boolean;
+}
+
+/** A device of the system, as the Ajax app lists it. */
+export interface CloudDevice {
+  id: string;
+  hubId: string;
+  name: string;
+  /** Number of the device on the hub, which may be the zone SIA reports it with. */
+  index: number;
+  /** Family such as `motion_protect`, when this version of the plugin knows it. */
+  family?: string;
+  online: boolean;
+  /** The user deactivated it, for good or for now. */
+  bypassed: boolean;
+  malfunction: boolean;
+  tampered: boolean;
+  batteryPercent?: number;
+  batteryLow?: boolean;
+  /** `none`, `weak`, `normal`, `strong` or `disconnected`. */
+  signal?: string;
+  /** In degrees Celsius, for the devices that measure it. */
+  temperature?: number;
 }
 
 export type FailureReason =
@@ -72,6 +95,8 @@ const LOGIN_TOTP = '/systems.ajax.api.ecosystem.v3.mobilegwsvc.service.login_by_
 const FIND_SPACES = '/systems.ajax.api.ecosystem.v3.mobilegwsvc.service.find_user_spaces_with_pagination'
   + '.FindUserSpacesWithPaginationService/execute';
 const SECURITY = '/systems.ajax.api.mobile.v2.space.security.SpaceSecurityService';
+
+const STREAM_DEVICES = '/systems.ajax.api.ecosystem.v3.mobilegwsvc.service.stream_light_devices.StreamLightDevicesService/execute';
 
 const LOGOUT = '/systems.ajax.api.ecosystem.v3.mobilegwsvc.service.logout.LogoutService/execute';
 
@@ -209,6 +234,20 @@ export class AjaxCloud {
     }));
   }
 
+  /**
+   * Lists the devices of a space, with their state. The server streams them; this reads the first message,
+   * which is the full list, and hangs up.
+   */
+  async devices(spaceId: string): Promise<CloudDevice[]> {
+    const request = new Writer().string(1, spaceId, true);
+    const response = Message.decode(await this.authenticated(STREAM_DEVICES, request.finish(), true));
+    const snapshot = response.message(1)?.message(1);
+    if (!snapshot) {
+      throw new CloudError('rejected', 'Ajax did not send the list of devices');
+    }
+    return parseDevices(snapshot);
+  }
+
   /** Sends one arming command. A request to reach the state the space is already in counts as success. */
   async command(spaceId: string, command: Command): Promise<void> {
     const locator = new Writer().string(1, spaceId, true);
@@ -227,12 +266,13 @@ export class AjaxCloud {
     throw new CloudError('rejected', `Ajax refused "${command}": ${name.replace(/_/g, ' ')}`, name);
   }
 
-  private async authenticated(path: string, message: Buffer): Promise<Buffer> {
+  /** @param streaming the call streams: only its first message is wanted. */
+  private async authenticated(path: string, message: Buffer, streaming = false): Promise<Buffer> {
     if (!this.session) {
       await this.login();
     }
     try {
-      return await this.call(path, message, this.sessionMetadata());
+      return await this.call(path, message, this.sessionMetadata(), streaming);
     } catch (error) {
       if (!(error instanceof CloudError) || error.reason !== 'unauthenticated') {
         throw error;
@@ -240,12 +280,15 @@ export class AjaxCloud {
     }
     // The session expired: log in again, once.
     await this.login();
-    return this.call(path, message, this.sessionMetadata());
+    return this.call(path, message, this.sessionMetadata(), streaming);
   }
 
-  private async call(path: string, message: Buffer, metadata: Metadata): Promise<Buffer> {
+  private async call(path: string, message: Buffer, metadata: Metadata, streaming = false): Promise<Buffer> {
     try {
-      return await this.channel.unary(path, message, metadata, this.options.timeoutMs ?? 15_000);
+      const timeout = this.options.timeoutMs ?? 15_000;
+      return streaming
+        ? await this.channel.firstMessage(path, message, metadata, timeout)
+        : await this.channel.unary(path, message, metadata, timeout);
     } catch (error) {
       if (!(error instanceof GrpcError)) {
         throw error;
@@ -288,4 +331,65 @@ function translate(error: GrpcError): CloudError {
     return new CloudError('unavailable', `Ajax cloud unreachable: ${error.message}`);
   }
   return new CloudError('rejected', `Ajax cloud error ${error.code}: ${error.message}`);
+}
+
+const SIGNALS = ['', 'none', 'weak', 'normal', 'strong', 'disconnected'];
+const STATE_OFFLINE = 9;
+
+/** Field numbers of `LightDeviceStatus` this client reads. */
+const STATUS = { signal: 2, battery: 9, caseDrilling: 19, malfunction: 50, temperature: 73, lidOpened: 82 } as const;
+
+/** Reads the `Snapshot` of the stream of devices: one `LightDevice` per device, of which only the hub devices matter here. */
+export function parseDevices(snapshot: Message): CloudDevice[] {
+  const devices: CloudDevice[] = [];
+  for (const light of snapshot.messages(1)) {
+    const common = light.message(1)?.message(1);
+    const profile = common?.message(1);
+    if (!common || !profile) {
+      continue;
+    }
+
+    const device: CloudDevice = {
+      id: profile.string(1),
+      hubId: common.string(2),
+      name: profile.string(2),
+      index: profile.int32(11),
+      online: !profile.varints(8).includes(STATE_OFFLINE),
+      bypassed: profile.varint(12) === 1,
+      malfunction: profile.varint(7) > 0,
+      tampered: false,
+    };
+    const family = familyName(common.message(3)?.numbers[0] ?? 0);
+    if (family) {
+      device.family = family;
+    }
+
+    for (const status of profile.messages(9)) {
+      const [kind] = status.numbers;
+      switch (kind) {
+        case STATUS.battery: {
+          const battery = status.message(kind)!;
+          // 1 is "ok"; the other states are the battery asking for attention, from a warning to an error.
+          device.batteryPercent = battery.varint(2);
+          device.batteryLow = battery.varint(1) > 1;
+          break;
+        }
+        case STATUS.signal:
+          device.signal = SIGNALS[status.message(kind)?.varint(1) ?? 0] || undefined;
+          break;
+        case STATUS.temperature:
+          device.temperature = status.message(kind)!.int32(1);
+          break;
+        case STATUS.lidOpened:
+        case STATUS.caseDrilling:
+          device.tampered = true;
+          break;
+        case STATUS.malfunction:
+          device.malfunction = true;
+          break;
+      }
+    }
+    devices.push(device);
+  }
+  return devices;
 }
