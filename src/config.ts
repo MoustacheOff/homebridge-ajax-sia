@@ -203,7 +203,7 @@ function parseInfo(value: unknown, label: string, errors: string[]): AccessoryIn
  * Version of the Ajax app announced to the server. Kept at the latest release on the App Store by
  * scripts/update-client-version.mjs, which a daily workflow runs; do not edit the number by hand.
  */
-export const DEFAULT_CLIENT_VERSION = '3.56';
+export const DEFAULT_CLIENT_VERSION = '3.57';
 
 /** SIA already delivers events as they happen, so the cloud is only asked now and then, to keep the load on it low. */
 const DEFAULT_SYNC_MINUTES = 60;

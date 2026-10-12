@@ -12,6 +12,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - The README credits the projects and documentation this plugin was built from.
 - The Homebridge badge of the README reads the supported versions from the published package, like the Node.js one.
+- The default Ajax app version announced to Ajax is now 3.57, the latest on the App Store.
 
 ## [1.0.2] - 2026-10-11
 

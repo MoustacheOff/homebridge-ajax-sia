@@ -192,7 +192,7 @@ SIA only listens. To arm, disarm and switch to night mode from Apple Home, the p
 | `spaceId` | none | Alternative to `spaceName`. |
 | `syncIntervalMinutes` | `60` | How often to read the real state. `0` reads only at startup and after a command. |
 | `deviceModel`, `deviceOs` | `Homebridge`, the host's OS and version | How the plugin is named in the list of sessions of the account. The OS is read from the machine, for example `Debian GNU/Linux bookworm 12.15 aarch64` or `macOS 27.0.1`. |
-| `clientVersion` | `3.56` | App version announced to Ajax. The default follows the latest release of the Ajax app on the App Store, checked daily and shipped with plugin updates. Raise it yourself if the log says Ajax no longer accepts the client. |
+| `clientVersion` | `3.57` | App version announced to Ajax. The default follows the latest release of the Ajax app on the App Store, checked daily and shipped with plugin updates. Raise it yourself if the log says Ajax no longer accepts the client. |
 
 A command that is refused (hub busy, malfunction to acknowledge, no permission) is logged with the reason and reported to HomeKit as a failure. The device id and session are kept in the Homebridge storage folder (`homebridge-ajax-sia-cloud.json`, readable by its owner only), so a restart does not open a new session.
 
