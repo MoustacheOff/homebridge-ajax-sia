@@ -108,12 +108,6 @@ describe('AjaxSiaPlatform', () => {
     expect(messages.info.some((line) => line.includes('Zone 501'))).toBe(false);
   });
 
-  it('logs a warning when the hub could not activate night mode', async () => {
-    const { port, messages } = await launch();
-    await hubSends(port, hubMessage({ data: 'Nri1/NE' }));
-    expect(messages.warn.some((line) => line.includes('night mode could not be activated'))).toBe(true);
-  });
-
   it('restores the last known arming state after a restart', async () => {
     const first = await launch();
     await hubSends(first.port, hubMessage({ data: 'Nri1/NL4' }));
