@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_DEVICE_MODEL, DEFAULT_DEVICE_OS, parseConfig } from '../src/config.js';
+import { DEFAULT_CLIENT_VERSION, DEFAULT_DEVICE_MODEL, DEFAULT_DEVICE_OS, parseConfig } from '../src/config.js';
 
 const valid = { platform: 'AjaxSia', name: 'Ajax', accountId: 'ab12' };
 
@@ -117,7 +117,7 @@ describe('parseConfig cloud', () => {
       email: 'me@example.com',
       password: 'hunter2',
       host: 'mobile-gw.prod.ajax.systems',
-      clientVersion: '3.57',
+      clientVersion: DEFAULT_CLIENT_VERSION,
       deviceModel: DEFAULT_DEVICE_MODEL,
       deviceOs: DEFAULT_DEVICE_OS,
       syncIntervalMinutes: 60,

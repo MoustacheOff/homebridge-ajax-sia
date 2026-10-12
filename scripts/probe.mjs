@@ -12,6 +12,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { AjaxCloud, CloudError, sha256 } from '../dist/cloud/ajax.js';
+import { DEFAULT_CLIENT_VERSION } from '../dist/config.js';
 
 const {
   AJAX_EMAIL: email,
@@ -34,7 +35,7 @@ const cloud = new AjaxCloud({
   passwordHash: sha256(password),
   ...(totpSecret ? { totpSecret } : {}),
   deviceId: randomUUID(),
-  clientVersion: clientVersion ?? '3.57',
+  clientVersion: clientVersion ?? DEFAULT_CLIENT_VERSION,
   ...(deviceModel ? { deviceModel } : {}),
   ...(deviceOs ? { deviceOs } : {}),
 });

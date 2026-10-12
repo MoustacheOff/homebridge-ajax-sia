@@ -1,0 +1,57 @@
+name: Ajax app version
+
+# Ajax retires old app versions, and the plugin announces one to the server. Once a day, look up the latest
+# release of the Ajax app on the App Store; when it is newer than the default, propose raising it.
+
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: npm
+      - name: Look up the latest Ajax app version
+        id: latest
+        run: node scripts/update-client-version.mjs
+      - name: Check that the plugin still builds and passes its tests
+        if: steps.latest.outputs.changed == 'true'
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Propose the new version
+        if: steps.latest.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.latest.outputs.version }}
+        run: |
+          branch="ajax-app-$VERSION"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "A change for $VERSION was already proposed"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "chore: announce Ajax app version $VERSION"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore: announce Ajax app version $VERSION" \
+            --body "The App Store now has version $VERSION of the Ajax app. This raises the default the plugin announces to Ajax, in the code, the settings form and the README.
+
+          The workflow ran the linter, the type check, the tests and the build before opening this pull request. GitHub does not start the usual checks on a pull request opened by a workflow: close and reopen it to run them.
+
+          Before releasing, try it against a real account with the probe (\`npm run build\`, then \`node scripts/probe.mjs\`, see its header). Merge with *Squash and merge*, then publish a new version so that users get the new default."
