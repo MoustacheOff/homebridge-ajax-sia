@@ -111,8 +111,13 @@ export class ZoneAccessory {
       details.setCharacteristic(Characteristic.SerialNumber, info.id);
     }
 
+    const before = this.accessory.services.length;
     this.syncBattery(info);
     this.syncTemperature(info);
+    if (this.accessory.services.length !== before) {
+      // Homebridge only writes its cache now and then: have it keep the services that came or went.
+      this.api.updatePlatformAccessories([this.accessory]);
+    }
     this.render();
   }
 

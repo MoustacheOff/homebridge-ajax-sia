@@ -214,8 +214,23 @@ describe('ZoneAccessory with what the Ajax account says', () => {
     const zone = new ZoneAccessory(api, accessory, { zone: 3, name: 'Salon', type: 'motion', ...device }, model, 30, options);
     const read = (service: ServiceRef, characteristic: CharacteristicRef, subtype?: string) =>
       (subtype ? accessory.getServiceById(service, subtype) : accessory.getService(service))?.getCharacteristic(characteristic)?.value;
-    return { zone, accessory, model, read };
+    return { zone, accessory, model, read, api };
   }
+
+  it('has Homebridge keep the services it adds or removes, and only then', () => {
+    const { zone, accessory, api } = sensor();
+    const update = vi.mocked(api.updatePlatformAccessories);
+
+    zone.applyCloud(info());
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith([accessory]);
+
+    zone.applyCloud(info({ batteryPercent: 80 }));
+    expect(update).toHaveBeenCalledTimes(1);
+
+    zone.applyCloud(info({ batteryPercent: undefined, temperature: undefined }));
+    expect(update).toHaveBeenCalledTimes(2);
+  });
 
   it('is not at fault until the account says so', () => {
     const { read } = sensor();

@@ -40,6 +40,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
   private readonly cached = new Map<string, PlatformAccessory>();
   private readonly zones: ZoneAccessory[] = [];
   private readonly zoneByNumber = new Map<number, ZoneAccessory>();
+  private devicesRead = false;
   private readonly announcedZones = new Set<number>();
   private server?: SiaServer;
   private hub?: HubAccessory;
@@ -306,6 +307,11 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
   private applyDevices(config: Config, model: AjaxModel, devices: CloudDevice[]): void {
     const settings = config.cloud;
     const { hap } = this.api;
+    if (!this.devicesRead) {
+      this.devicesRead = true;
+      const sensors = devices.filter((device) => sensorKind(device.family)).length;
+      this.log.info(`Read ${devices.length} devices from your Ajax account (${sensors} detectors)`);
+    }
     const listed = new Set<number>();
     const names = new Map<string, number>();
     for (const device of devices) {
