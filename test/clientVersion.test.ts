@@ -65,7 +65,9 @@ describe('scripts/update-client-version.mjs', () => {
     expect(read('src/config.ts')).toContain("DEFAULT_CLIENT_VERSION = '99.1'");
     expect(JSON.parse(read('config.schema.json')).schema.properties.cloud.properties.clientVersion.default).toBe('99.1');
     expect(read('README.md')).toContain('| `clientVersion` | `99.1` |');
-    expect(read('CHANGELOG.md')).toMatch(/## \[Unreleased\]\n\n### Changed\n\n[\s\S]*now 99\.1, the latest on the App Store\./);
+    const unreleased = read('CHANGELOG.md').split('\n## [')[1]!;
+    expect(unreleased).toMatch(/^Unreleased\]/);
+    expect(unreleased).toMatch(/### Changed\n\n(- .*\n)*- The default Ajax app version announced to Ajax is now 99\.1, the latest on the App Store\.\n/);
     // Only the default changed: the old number is still the one announced by the tests and the examples.
     expect(read('README.md').replace('99.1', DEFAULT_CLIENT_VERSION)).toBe(readFileSync(join(repo, 'README.md'), 'utf8'));
   });
