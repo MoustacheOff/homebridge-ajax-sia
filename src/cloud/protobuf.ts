@@ -126,6 +126,24 @@ export class Message {
     return typeof value === 'bigint' ? Number(value) : 0;
   }
 
+  /** Every value of a repeated numeric field, whether the sender packed them into one block or not. */
+  varints(field: number): number[] {
+    const result: number[] = [];
+    for (const value of this.fields.get(field) ?? []) {
+      if (typeof value === 'bigint') {
+        result.push(Number(value));
+        continue;
+      }
+      let offset = 0;
+      while (offset < value.length) {
+        const [number, next] = decodeVarint(value, offset);
+        result.push(Number(number));
+        offset = next;
+      }
+    }
+    return result;
+  }
+
   string(field: number): string {
     const value = this.fields.get(field)?.[0];
     return Buffer.isBuffer(value) ? value.toString('utf8') : '';

@@ -1,6 +1,12 @@
 import { createServer, type Http2Server } from 'node:http2';
 import type { AddressInfo } from 'node:net';
 
+export const frame = (message: Buffer): Buffer => {
+  const prefix = Buffer.alloc(5);
+  prefix.writeUInt32BE(message.length, 1);
+  return Buffer.concat([prefix, message]);
+};
+
 export interface Call {
   path: string;
   headers: Record<string, string | string[] | undefined>;
@@ -13,12 +19,16 @@ export type Reply =
   /** Reply with a gRPC status but sent as trailers after a body, as a real service does. */
   | { message: Buffer; status: number; text?: string }
   | { raw: Buffer; encoding?: string }
+  /** Streams these messages, then keeps the stream open like a server that has more to say. */
+  | { stream: Buffer[] }
   /** Never answer. */
   | { hang: true };
 
 /** A cleartext HTTP/2 server speaking just enough gRPC to test the client. */
 export class FakeGrpcServer {
   readonly calls: Call[] = [];
+  /** Streams the client hung up on, so a test can tell that it did. */
+  streamsClosedByClient = 0;
   private server?: Http2Server;
   handler: (call: Call) => Reply = () => ({ status: 12 });
 
@@ -34,6 +44,15 @@ export class FakeGrpcServer {
         const reply = this.handler(call);
 
         if ('hang' in reply) {
+          return;
+        }
+
+        if ('stream' in reply) {
+          stream.respond({ ':status': 200, 'content-type': 'application/grpc' });
+          for (const message of reply.stream) {
+            stream.write(frame(message));
+          }
+          stream.on('close', () => void this.streamsClosedByClient++);
           return;
         }
 
@@ -76,9 +95,3 @@ export class FakeGrpcServer {
     await new Promise<void>((resolve) => (this.server ? this.server.close(() => resolve()) : resolve()));
   }
 }
-
-export const frame = (message: Buffer): Buffer => {
-  const prefix = Buffer.alloc(5);
-  prefix.writeUInt32BE(message.length, 1);
-  return Buffer.concat([prefix, message]);
-};

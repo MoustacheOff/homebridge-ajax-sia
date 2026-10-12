@@ -31,6 +31,15 @@ export class GrpcChannel {
   constructor(private readonly origin: string) {}
 
   unary(path: string, message: Buffer, metadata: Metadata, timeoutMs: number): Promise<Buffer> {
+    return this.exchange(path, message, metadata, timeoutMs, false);
+  }
+
+  /** For a call that streams: returns the first message the server sends, then hangs up. */
+  firstMessage(path: string, message: Buffer, metadata: Metadata, timeoutMs: number): Promise<Buffer> {
+    return this.exchange(path, message, metadata, timeoutMs, true);
+  }
+
+  private exchange(path: string, message: Buffer, metadata: Metadata, timeoutMs: number, stopAtFirst: boolean): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const session = connect(this.origin);
       const state: { settled: boolean; timer?: NodeJS.Timeout } = { settled: false };
@@ -71,7 +80,20 @@ export class GrpcChannel {
       request.on('trailers', (received) => {
         trailers = received;
       });
-      request.on('data', (chunk: Buffer) => body.push(chunk));
+      request.on('data', (chunk: Buffer) => {
+        body.push(chunk);
+        if (!stopAtFirst) {
+          return;
+        }
+        try {
+          const payload = firstFrame(Buffer.concat(body), first(headers['grpc-encoding']));
+          if (payload) {
+            finish(undefined, payload);
+          }
+        } catch (error) {
+          finish(error as Error);
+        }
+      });
       request.on('error', (error) => finish(new GrpcError(GrpcStatus.UNAVAILABLE, error.message)));
       request.on('close', () => {
         // Errors without a body arrive as "trailers-only" responses: the status is in the headers.
@@ -108,13 +130,24 @@ function unframe(data: Buffer, encoding: string | undefined): Buffer {
   if (data.length < 5) {
     throw new GrpcError(GrpcStatus.UNAVAILABLE, 'Empty gRPC response');
   }
-  const compressed = data[0] === 1;
-  const length = data.readUInt32BE(1);
-  if (data.length < 5 + length) {
+  const payload = firstFrame(data, encoding);
+  if (!payload) {
     throw new GrpcError(GrpcStatus.UNAVAILABLE, 'Truncated gRPC response');
   }
+  return payload;
+}
+
+/** The first complete message in `data`, or `undefined` while it has not fully arrived. */
+function firstFrame(data: Buffer, encoding: string | undefined): Buffer | undefined {
+  if (data.length < 5) {
+    return undefined;
+  }
+  const length = data.readUInt32BE(1);
+  if (data.length < 5 + length) {
+    return undefined;
+  }
   const payload = data.subarray(5, 5 + length);
-  if (!compressed) {
+  if (data[0] !== 1) {
     return payload;
   }
   if (encoding !== 'gzip') {
