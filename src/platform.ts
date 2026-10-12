@@ -41,6 +41,8 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
   private readonly zones: ZoneAccessory[] = [];
   private readonly zoneByNumber = new Map<number, ZoneAccessory>();
   private devicesRead = false;
+  /** What each device of the account was last reported as needing, so that it is logged once. */
+  private readonly troubles = new Map<string, string>();
   private readonly announcedZones = new Set<number>();
   private server?: SiaServer;
   private hub?: HubAccessory;
@@ -294,6 +296,41 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     }
   }
 
+  /**
+   * The hub is reported as faulty when the account says it is offline or in malfunction. The other devices that
+   * are not exposed (sirens, keypads, keyfobs, range extenders) only get a line in the log when they need attention,
+   * once for each time they do.
+   */
+  private watchOthers(model: AjaxModel, devices: CloudDevice[]): void {
+    for (const device of devices) {
+      const trouble = [
+        !device.online ? 'offline' : '',
+        device.malfunction ? 'in malfunction' : '',
+        device.batteryLow ? `low on battery (${device.batteryPercent ?? '?'}%)` : '',
+        device.tampered ? 'opened' : '',
+      ].filter(Boolean).join(', ');
+
+      if (device.family?.startsWith('hub')) {
+        model.setCloudFault(!device.online || device.malfunction);
+      }
+      const known = this.troubles.get(device.id);
+      if (trouble === (known ?? '')) {
+        continue;
+      }
+      if (trouble) {
+        this.troubles.set(device.id, trouble);
+        if (!sensorKind(device.family)) {
+          this.log.warn(`${device.name} is ${trouble}`);
+        }
+      } else {
+        this.troubles.delete(device.id);
+        if (!sensorKind(device.family)) {
+          this.log.info(`${device.name} is back to normal`);
+        }
+      }
+    }
+  }
+
   private addZone(zone: ZoneAccessory): void {
     this.zones.push(zone);
     this.zoneByNumber.set(zone.zone, zone);
@@ -312,6 +349,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       const sensors = devices.filter((device) => sensorKind(device.family)).length;
       this.log.info(`Read ${devices.length} devices from your Ajax account (${sensors} detectors)`);
     }
+    this.watchOthers(model, devices);
     const listed = new Set<number>();
     const names = new Map<string, number>();
     for (const device of devices) {

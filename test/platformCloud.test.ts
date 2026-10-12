@@ -235,6 +235,29 @@ describe('AjaxSiaPlatform with the devices of the Ajax account', () => {
     expect(cloud.calls.filter((call) => call.path.endsWith('LoginByPasswordService/execute'))).toHaveLength(1);
   });
 
+  it('reports the hub as faulty when the account says it is offline', async () => {
+    handlers[STREAM] = () => ({ stream: [snapshot(hubDevice({ name: 'Hub 2 (4G)', index: 0, type: HUB, states: [9] }))] });
+    const { registered, messages } = await launch();
+    const hub = registered.find((accessory) => accessory.getService(Service.SecuritySystem))!;
+    const fault = () => hub.getService(Service.SecuritySystem)!.getCharacteristic(Characteristic.StatusFault).value;
+    await vi.waitFor(() => expect(fault()).toBe(1));
+    expect(messages.warn.some((line) => line.startsWith('Hub 2 (4G) is offline'))).toBe(true);
+  });
+
+  it('writes a line in the log, once, when a siren or a keyfob needs attention, and when it is fine again', async () => {
+    handlers[STREAM] = () => ({
+      stream: [snapshot(
+        hubDevice({ id: 'S1', name: 'StreetSiren', index: 5, type: SIREN, states: [9], statuses: [battery(3, 9)] }),
+        hubDevice({ id: 'D1', name: 'Garage', index: 2, type: MOTION, states: [9] }),
+      )],
+    });
+    const { messages } = await launch();
+    await vi.waitFor(() => expect(messages.warn.some((line) => line.includes('StreetSiren is offline, low on battery (9%)'))).toBe(true));
+    // A detector has its own status in Apple Home: it is not written to the log as well.
+    expect(messages.warn.some((line) => line.includes('Garage'))).toBe(false);
+    expect(messages.warn.filter((line) => line.includes('StreetSiren'))).toHaveLength(1);
+  });
+
   it('exposes the detectors the user did not list, and nothing else', async () => {
     handlers[STREAM] = () => ({
       stream: [snapshot(

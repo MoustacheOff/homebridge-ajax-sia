@@ -9,6 +9,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - With the Ajax account connected, the detectors show their **battery level**, are flagged when **offline**, in **malfunction** or opened, and carry their real **model and serial number**.
 - A **temperature sensor** is added to the detectors that measure it (`cloud.temperatureSensors`).
 - Detectors that are in the Ajax account but not in `devices` are **found and exposed** with their name in the Ajax app (`cloud.discoverDevices`); the ones that leave the account are removed.
+- The alarm tile is marked as faulty when the account says the hub is offline or in malfunction, and the log says when a siren, keyfob or keypad goes offline, runs low on battery or is opened.
 - The probe script (`scripts/probe.mjs`) lists the devices of each space.
 - A daily workflow looks up the latest release of the Ajax app on the App Store and proposes raising the default announced app version, in the code, the settings form and the README, so the default no longer waits for Ajax to retire the old one.
 

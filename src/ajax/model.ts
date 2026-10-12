@@ -98,6 +98,8 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
   private readonly armedAreas = new Set<number>();
   private night = false;
   private offline = false;
+  /** The Ajax account reports the hub offline or in malfunction. */
+  private cloudFault = false;
   private hubTampered = false;
   private readonly hubFaults = new Set<string>();
   private readonly alarms = new Map<string, AlarmKind>();
@@ -123,7 +125,7 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
       arm,
       alarm: [...this.alarms.values()].some((kind) => HUB_ALARMS.has(kind)),
       tampered: this.hubTampered,
-      fault: this.offline || this.hubFaults.size > 0,
+      fault: this.offline || this.cloudFault || this.hubFaults.size > 0,
     };
   }
 
@@ -154,6 +156,14 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
       this.armedAreas.add(1);
     }
     this.publishHub();
+  }
+
+  /** The Ajax account says the hub is offline or in malfunction (or no longer says so). Surfaced as a fault. */
+  setCloudFault(fault: boolean): void {
+    if (this.cloudFault !== fault) {
+      this.cloudFault = fault;
+      this.publishHub();
+    }
   }
 
   /** Mark the hub as silent (or back). Surfaced as a fault. */
