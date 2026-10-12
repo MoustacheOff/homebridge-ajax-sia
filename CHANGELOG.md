@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- A daily workflow looks up the latest release of the Ajax app on the App Store and proposes raising the default announced app version, in the code, the settings form and the README, so the default no longer waits for Ajax to retire the old one.
+
 ### Changed
 
 - The README credits the projects and documentation this plugin was built from.

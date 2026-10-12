@@ -33,7 +33,7 @@ export default tseslint.config(
     // Command line helpers run directly by Node.
     files: ['scripts/**/*.mjs'],
     languageOptions: {
-      globals: { process: 'readonly', console: 'readonly' },
+      globals: { process: 'readonly', console: 'readonly', fetch: 'readonly', AbortSignal: 'readonly' },
     },
   },
 );

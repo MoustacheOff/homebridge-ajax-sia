@@ -199,7 +199,10 @@ function parseInfo(value: unknown, label: string, errors: string[]): AccessoryIn
   return info;
 }
 
-/** Version of the Ajax Android app announced to the server, known to be accepted at the time of writing. */
+/**
+ * Version of the Ajax app announced to the server. Kept at the latest release on the App Store by
+ * scripts/update-client-version.mjs, which a daily workflow runs; do not edit the number by hand.
+ */
 export const DEFAULT_CLIENT_VERSION = '3.57';
 
 /** SIA already delivers events as they happen, so the cloud is only asked now and then, to keep the load on it low. */
