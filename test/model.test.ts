@@ -238,6 +238,23 @@ describe('AjaxModel', () => {
     });
   });
 
+  it('reports a fault while the account says the hub is offline', () => {
+    model.setCloudFault(true);
+    expect(model.hub.fault).toBe(true);
+    expect(hubUpdates.at(-1)?.fault).toBe(true);
+    model.setCloudFault(true);
+    expect(hubUpdates).toHaveLength(1);
+    model.setCloudFault(false);
+    expect(model.hub.fault).toBe(false);
+  });
+
+  it('keeps the fault of a silent hub when the account says it is fine', () => {
+    model.setOffline(true);
+    model.setCloudFault(true);
+    model.setCloudFault(false);
+    expect(model.hub.fault).toBe(true);
+  });
+
   it('reports events it does not understand', () => {
     const ignored: string[] = [];
     model.on('ignored', (event) => ignored.push(event.code));

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Read-only check of an Ajax account: logs in and lists the spaces with their state. Sends no command.
+// Read-only check of an Ajax account: logs in and lists the spaces with their state and devices. Sends no command.
 //
 //   npm run build
 //   read -rs AJAX_PASSWORD && export AJAX_PASSWORD && AJAX_EMAIL=you@example.com node scripts/probe.mjs
@@ -47,6 +47,18 @@ try {
   console.log(`Spaces: ${spaces.length}`);
   for (const space of spaces) {
     console.log(`  - "${space.name}"  id=${space.id}  state=${space.state}  hub=${space.online ? 'online' : 'offline'}`);
+    for (const device of await cloud.devices(space.id)) {
+      const extras = [
+        device.batteryPercent !== undefined ? `battery=${device.batteryPercent}%${device.batteryLow ? ' (low)' : ''}` : '',
+        device.signal ? `signal=${device.signal}` : '',
+        device.temperature !== undefined ? `temperature=${device.temperature}` : '',
+        device.tampered ? 'tampered' : '',
+        device.malfunction ? 'malfunction' : '',
+        device.bypassed ? 'deactivated' : '',
+      ].filter(Boolean).join('  ');
+      const state = device.online ? 'online' : 'OFFLINE';
+      console.log(`      #${device.index}  "${device.name}"  ${device.family ?? 'unknown family'}  ${state}  ${extras}`);
+    }
   }
 } catch (error) {
   console.error(`Failed: ${error instanceof CloudError ? `[${error.reason}] ` : ''}${error.message}`);

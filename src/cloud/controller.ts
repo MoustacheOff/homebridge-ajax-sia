@@ -1,5 +1,5 @@
 import type { ArmState } from '../ajax/model.js';
-import { CloudError, type AjaxCloud, type Space, type SpaceState } from './ajax.js';
+import { CloudError, type AjaxCloud, type CloudDevice, type Space, type SpaceState } from './ajax.js';
 
 export interface Logger {
   debug(message: string): void;
@@ -42,6 +42,12 @@ export class CloudController {
   async read(): Promise<ArmState | undefined> {
     const space = await this.space();
     return STATES[space.state];
+  }
+
+  /** Lists the devices of the space with their state. */
+  async devices(): Promise<CloudDevice[]> {
+    const id = this.spaceId ?? (await this.space()).id;
+    return this.cloud.devices(id);
   }
 
   /** Moves the space to `target`, from the state it is believed to be in. */

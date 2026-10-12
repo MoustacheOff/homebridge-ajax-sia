@@ -121,7 +121,17 @@ describe('parseConfig cloud', () => {
       deviceModel: DEFAULT_DEVICE_MODEL,
       deviceOs: DEFAULT_DEVICE_OS,
       syncIntervalMinutes: 60,
+      discoverDevices: true,
+      temperatureSensors: true,
     });
+  });
+
+  it.each(['discoverDevices', 'temperatureSensors'])('lets the user turn %s off', (field) => {
+    expect(parseConfig({ ...valid, cloud: { ...cloud, [field]: false } }).config?.cloud).toMatchObject({ [field]: false });
+  });
+
+  it.each(['discoverDevices', 'temperatureSensors'])('refuses a %s that is not true or false', (field) => {
+    expect(parseConfig({ ...valid, cloud: { ...cloud, [field]: 'no' } }).errors).toEqual([`"cloud.${field}" must be true or false`]);
   });
 
   it('lets the user name the device shown in the Ajax app', () => {

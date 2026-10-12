@@ -1,13 +1,22 @@
 import type { API, Characteristic, PlatformAccessory, Service, WithUUID } from 'homebridge';
 
 import type { AjaxModel, AlarmKind, ZoneState } from '../ajax/model.js';
+import type { CloudDevice } from '../cloud/ajax.js';
+import { displayFamily } from '../cloud/deviceTypes.js';
 import type { DeviceConfig, ZoneType } from '../config.js';
 import { PLUGIN_VERSION } from '../settings.js';
 
 export type ZoneContext = {
   zone: number;
   type: ZoneType;
+  /** Created from the Ajax account rather than from the configuration. */
+  discovered?: boolean;
 };
+
+export interface ZoneOptions {
+  /** Add a temperature sensor when the Ajax account reports a temperature for the detector. */
+  temperature?: boolean;
+}
 
 type ServiceClass = WithUUID<new (displayName?: string, subtype?: string) => Service>;
 type CharacteristicClass = WithUUID<{ new (): Characteristic }>;
@@ -35,15 +44,18 @@ export class ZoneAccessory {
   private readonly binding: Binding;
   private state: ZoneState;
   private resetTimer?: NodeJS.Timeout;
+  /** What the Ajax account says about the detector, when the cloud connection is on. */
+  private cloud?: CloudDevice;
   /** Motion is momentary: it clears on its own after a delay instead of waiting for a restore event. */
   private motionExpired = false;
 
   constructor(
     private readonly api: API,
-    accessory: PlatformAccessory<ZoneContext>,
+    private readonly accessory: PlatformAccessory<ZoneContext>,
     private readonly device: DeviceConfig,
     model: AjaxModel,
     private readonly motionResetSeconds: number,
+    private readonly options: ZoneOptions = {},
   ) {
     const { Service, Characteristic } = api.hap;
 
@@ -61,8 +73,9 @@ export class ZoneAccessory {
     this.state = model.zone(device.zone);
 
     this.service.getCharacteristic(this.binding.characteristic).onGet(() => this.detection());
-    this.service.getCharacteristic(Characteristic.StatusTampered).onGet(() => (this.state.tampered ? 1 : 0));
-    this.service.getCharacteristic(Characteristic.StatusLowBattery).onGet(() => (this.state.lowBattery ? 1 : 0));
+    this.service.getCharacteristic(Characteristic.StatusTampered).onGet(() => (this.tampered() ? 1 : 0));
+    this.service.getCharacteristic(Characteristic.StatusLowBattery).onGet(() => (this.lowBattery() ? 1 : 0));
+    this.service.getCharacteristic(Characteristic.StatusFault).onGet(() => (this.fault() ? 1 : 0));
 
     this.render();
     model.on('zone', (zone, state) => {
@@ -77,8 +90,78 @@ export class ZoneAccessory {
     });
   }
 
+  get zone(): number {
+    return this.device.zone;
+  }
+
   dispose(): void {
     clearTimeout(this.resetTimer);
+  }
+
+  /** Takes in what the Ajax account says about this detector: how it is, its battery, its temperature, what it is. */
+  applyCloud(info: CloudDevice): void {
+    const { Service, Characteristic } = this.api.hap;
+    this.cloud = info;
+
+    const details = this.accessory.getService(Service.AccessoryInformation)!;
+    if (!this.device.model && info.family) {
+      details.setCharacteristic(Characteristic.Model, displayFamily(info.family));
+    }
+    if (!this.device.serial && info.id) {
+      details.setCharacteristic(Characteristic.SerialNumber, info.id);
+    }
+
+    const before = this.accessory.services.length;
+    this.syncBattery(info);
+    this.syncTemperature(info);
+    if (this.accessory.services.length !== before) {
+      // Homebridge only writes its cache now and then: have it keep the services that came or went.
+      this.api.updatePlatformAccessories([this.accessory]);
+    }
+    this.render();
+  }
+
+  private syncBattery(info: CloudDevice): void {
+    const { Service, Characteristic } = this.api.hap;
+    const existing = this.accessory.getService(Service.Battery);
+    if (info.batteryPercent === undefined) {
+      if (existing) {
+        this.accessory.removeService(existing);
+      }
+      return;
+    }
+    const battery = existing ?? this.accessory.addService(Service.Battery, `${this.accessory.displayName} battery`);
+    battery.updateCharacteristic(Characteristic.BatteryLevel, Math.min(100, info.batteryPercent));
+    battery.updateCharacteristic(Characteristic.ChargingState, Characteristic.ChargingState.NOT_CHARGEABLE);
+    battery.updateCharacteristic(Characteristic.StatusLowBattery, this.lowBattery() ? 1 : 0);
+  }
+
+  private syncTemperature(info: CloudDevice): void {
+    const { Service, Characteristic } = this.api.hap;
+    const existing = this.accessory.getServiceById(Service.TemperatureSensor, 'temperature');
+    if (!this.options.temperature || info.temperature === undefined) {
+      if (existing) {
+        this.accessory.removeService(existing);
+      }
+      return;
+    }
+    const name = `${this.accessory.displayName} temperature`;
+    const sensor = existing ?? this.accessory.addService(Service.TemperatureSensor, name, 'temperature');
+    sensor.updateCharacteristic(Characteristic.CurrentTemperature, info.temperature);
+  }
+
+  /** Reported by the detector itself over SIA, or seen as such by the Ajax account. */
+  private tampered(): boolean {
+    return this.state.tampered || this.cloud?.tampered === true;
+  }
+
+  private lowBattery(): boolean {
+    return this.state.lowBattery || this.cloud?.batteryLow === true;
+  }
+
+  /** The detector lost contact with the hub, was deactivated, or reports a malfunction. */
+  private fault(): boolean {
+    return this.cloud !== undefined && (!this.cloud.online || this.cloud.malfunction);
   }
 
   private bindingFor(type: ZoneType): Binding {
@@ -134,7 +217,8 @@ export class ZoneAccessory {
   private render(): void {
     const { Characteristic } = this.api.hap;
     this.service.updateCharacteristic(this.binding.characteristic, this.detection());
-    this.service.updateCharacteristic(Characteristic.StatusTampered, this.state.tampered ? 1 : 0);
-    this.service.updateCharacteristic(Characteristic.StatusLowBattery, this.state.lowBattery ? 1 : 0);
+    this.service.updateCharacteristic(Characteristic.StatusTampered, this.tampered() ? 1 : 0);
+    this.service.updateCharacteristic(Characteristic.StatusLowBattery, this.lowBattery() ? 1 : 0);
+    this.service.updateCharacteristic(Characteristic.StatusFault, this.fault() ? 1 : 0);
   }
 }

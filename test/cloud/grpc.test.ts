@@ -1,6 +1,6 @@
 import { gzipSync } from 'node:zlib';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { GrpcChannel, GrpcError, GrpcStatus } from '../../src/cloud/grpc.js';
 import { FakeGrpcServer, frame } from './fakeGrpc.js';
@@ -30,6 +30,38 @@ describe('GrpcChannel', () => {
     expect(call!.headers['content-type']).toBe('application/grpc');
     expect(call!.headers.te).toBe('trailers');
     expect(call!.headers['x-custom']).toBe('value');
+  });
+
+  describe('firstMessage', () => {
+    it('returns the first message of a stream and hangs up without waiting for the rest', async () => {
+      await start();
+      server.handler = () => ({ stream: [Buffer.from('snapshot'), Buffer.from('update')] });
+
+      const reply = await channel.firstMessage('/pkg.Service/stream', Buffer.from('open'), {}, 2000);
+
+      expect(reply.toString()).toBe('snapshot');
+      await vi.waitFor(() => expect(server.streamsClosedByClient).toBe(1));
+    });
+
+    it('reads a message that arrives in pieces', async () => {
+      await start();
+      const big = Buffer.alloc(100_000, 7);
+      server.handler = () => ({ stream: [big] });
+      const reply = await channel.firstMessage('/a/b', Buffer.alloc(0), {}, 2000);
+      expect(reply.equals(big)).toBe(true);
+    });
+
+    it('reports an error status as a GrpcError', async () => {
+      await start();
+      server.handler = () => ({ status: GrpcStatus.UNAUTHENTICATED, text: 'expired' });
+      await expect(channel.firstMessage('/a/b', Buffer.alloc(0), {}, 2000)).rejects.toMatchObject({ code: GrpcStatus.UNAUTHENTICATED });
+    });
+
+    it('gives up when the stream says nothing', async () => {
+      await start();
+      server.handler = () => ({ stream: [] });
+      await expect(channel.firstMessage('/a/b', Buffer.alloc(0), {}, 150)).rejects.toMatchObject({ code: GrpcStatus.DEADLINE_EXCEEDED });
+    });
   });
 
   it('maps a trailers-only error to a GrpcError', async () => {

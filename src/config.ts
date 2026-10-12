@@ -33,6 +33,10 @@ export interface CloudConfig {
   deviceModel: string;
   deviceOs: string;
   syncIntervalMinutes: number;
+  /** Expose the detectors of the Ajax account that are not in `devices`. */
+  discoverDevices: boolean;
+  /** Add a temperature sensor to the detectors that measure it. */
+  temperatureSensors: boolean;
 }
 
 export interface Config {
@@ -256,6 +260,18 @@ function parseCloud(value: unknown, errors: string[]): CloudConfig | undefined {
     }
   }
 
+  const flag = (field: string): boolean => {
+    const entry = raw[field];
+    if (entry === undefined) {
+      return true;
+    }
+    if (typeof entry !== 'boolean') {
+      errors.push(`"cloud.${field}" must be true or false`);
+      return true;
+    }
+    return entry;
+  };
+
   const totpSecret = text('totpSecret');
   const spaceId = text('spaceId');
   const spaceName = text('spaceName');
@@ -273,5 +289,7 @@ function parseCloud(value: unknown, errors: string[]): CloudConfig | undefined {
     deviceModel: text('deviceModel') ?? DEFAULT_DEVICE_MODEL,
     deviceOs: text('deviceOs') ?? DEFAULT_DEVICE_OS,
     syncIntervalMinutes: validInterval ? (syncInterval as number) : DEFAULT_SYNC_MINUTES,
+    discoverDevices: flag('discoverDevices'),
+    temperatureSensors: flag('temperatureSensors'),
   };
 }

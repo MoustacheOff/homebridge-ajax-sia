@@ -263,6 +263,24 @@
               "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
             }
           },
+          "discoverDevices": {
+            "title": "Discover detectors",
+            "type": "boolean",
+            "default": true,
+            "description": "Expose the motion, door, smoke and leak detectors of your Ajax account that are not listed under Detectors, with the name Ajax gives them. A detector listed above always keeps your own name.",
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          },
+          "temperatureSensors": {
+            "title": "Show temperatures",
+            "type": "boolean",
+            "default": true,
+            "description": "Add a temperature sensor to the detectors that measure it. Unlike motion and contact sensors, Apple Home shows these as tiles.",
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          },
           "clientVersion": {
             "title": "Announced app version",
             "type": "string",
@@ -367,6 +385,8 @@
         "cloud.totpSecret",
         "cloud.spaceName",
         "cloud.syncIntervalMinutes",
+        "cloud.discoverDevices",
+        "cloud.temperatureSensors",
         "cloud.clientVersion",
         "cloud.deviceModel",
         "cloud.deviceOs"

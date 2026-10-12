@@ -38,6 +38,23 @@ describe('Writer', () => {
   });
 });
 
+describe('Message.varints', () => {
+  it('reads a repeated field that was packed into one block', () => {
+    // field 8, wire type 2, three values: 9, 300, 1
+    const packed = Buffer.from([0x42, 0x04, 0x09, 0xac, 0x02, 0x01]);
+    expect(Message.decode(packed).varints(8)).toEqual([9, 300, 1]);
+  });
+
+  it('reads a repeated field that was sent one value at a time', () => {
+    const unpacked = new Writer().varint(8, 9).varint(8, 300).varint(8, 1).finish();
+    expect(Message.decode(unpacked).varints(8)).toEqual([9, 300, 1]);
+  });
+
+  it('is empty when the field is absent', () => {
+    expect(Message.decode(new Writer().varint(1, 5).finish()).varints(8)).toEqual([]);
+  });
+});
+
 describe('Message', () => {
   it('round-trips', () => {
     const buffer = new Writer()
