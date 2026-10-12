@@ -16,7 +16,7 @@
 
 Bring an [Ajax Systems](https://ajax.systems) alarm into Apple Home. By default it works **locally**, with no cloud account, no API key and no extra hardware.
 
-The hub reports its events straight to Homebridge over **SIA DC-09**, the same protocol it uses to talk to a monitoring station. The plugin turns them into a HomeKit security system and sensors, so you can see the alarm state on all your Apple devices (iPhone, iPad, Apple Watch and Mac), get notified, and use it in automations. Arming and disarming from HomeKit is possible too, through an optional and unofficial connection described [below](#commands-from-homekit-unofficial).
+The hub reports its events straight to Homebridge over **SIA DC-09**, the same protocol it uses to talk to a monitoring station. The plugin turns them into a HomeKit security system and sensors, so you can see the alarm state on all your Apple devices (iPhone, iPad, Apple Watch and Mac), get notified, and use it in automations. Arming and disarming from HomeKit is possible too, through an optional and unofficial connection described [below](#commands-from-homekit-and-more-unofficial).
 
 ## What you get
 
@@ -31,7 +31,7 @@ The hub reports its events straight to Homebridge over **SIA DC-09**, the same p
 
 Be clear-eyed about this before installing:
 
-- **SIA alone cannot arm or disarm the system.** It is a one-way channel: the hub talks, the plugin listens, so by default the security system tile is read-only. Commands go through the optional, unofficial cloud connection; read its [warning](#commands-from-homekit-unofficial) before enabling it.
+- **SIA alone cannot arm or disarm the system.** It is a one-way channel: the hub talks, the plugin listens, so by default the security system tile is read-only. Commands go through the optional, unofficial cloud connection; read its [warning](#commands-from-homekit-and-more-unofficial) before enabling it.
 - **Detectors only report while they are armed**, unless they are set as always active in the Ajax app. A motion detector in a disarmed system is silent, so its HomeKit sensor stays idle. In night mode, each detector follows its own "Arm in Night mode" setting.
 - **Sirens, key fobs and photo verification are not exposed.** SIA carries event codes only. A MotionCam / PhOD detector shows up as a regular motion sensor; its photos stay in the Ajax app.
 - **State is learned from events.** If the system changes while Homebridge is down, HomeKit is wrong until the next event, or until the next state read when commands are enabled. The last known state is restored after a restart.
