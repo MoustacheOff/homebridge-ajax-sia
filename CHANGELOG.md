@@ -10,6 +10,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- The README says that a home hub (Apple TV, HomePod or HomePod mini) is needed to use the alarm away from home and in automations.
 - The README credits the projects and documentation this plugin was built from.
 - The Homebridge badge of the README reads the supported versions from the published package, like the Node.js one.
 

@@ -151,6 +151,7 @@ The complete list of handled SIA codes is in [docs/events.md](docs/events.md).
 
 - The alarm is a normal tile. With commands enabled it offers **Away**, **Night** and **Off**; "Home" is not offered because Ajax has no equivalent without groups.
 - **Sensors are not tiles.** Apple groups motion and contact sensors into status badges at the top of their room ("Motion: none detected", "Contact sensor: closed"), never on the main page. That is how Home treats every such sensor; use them in **automations** instead, for example a notification when a motion is detected while the alarm is armed.
+- **Away from home and automations need a home hub.** An Apple TV, a HomePod or a HomePod mini set up in the Home app is what lets you control the alarm when you are not on your home network, and run automations on it. Apple requires it for every accessory, so there is nothing to configure in the plugin.
 - Siri and the Control Center can arm and disarm. Disarming asks you to unlock the device first, and smart speakers refuse it by design.
 
 ## Commands from HomeKit (unofficial)
