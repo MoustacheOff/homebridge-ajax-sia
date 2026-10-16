@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- The default Ajax app version announced to Ajax is now 3.58, the latest on the App Store.
+
 ## [1.1.2] - 2026-10-12
 
 ### Fixed
