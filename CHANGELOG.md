@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- The README has a section on securing the listener (encryption and `allowedAddresses`), as the Homebridge team suggested when verifying the plugin, and carries the Verified by Homebridge badge.
+
 ## [1.1.2] - 2026-10-12
 
 ### Fixed

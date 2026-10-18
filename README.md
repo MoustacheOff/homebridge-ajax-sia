@@ -11,6 +11,7 @@
   <a href="https://github.com/MoustacheOff/homebridge-ajax-sia/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/MoustacheOff/homebridge-ajax-sia/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://nodejs.org"><img alt="Node.js" src="https://badgen.net/npm/node/homebridge-ajax-sia?icon=node&color=green"></a>
   <a href="https://homebridge.io"><img alt="Homebridge" src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fregistry.npmjs.org%2Fhomebridge-ajax-sia%2Flatest&query=%24.engines.homebridge&label=homebridge&color=491F59"></a>
+  <a href="https://github.com/homebridge/homebridge/wiki/Verified-Plugins"><img alt="Verified by Homebridge" src="https://badgen.net/badge/homebridge/verified/purple"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://badgen.net/badge/license/MIT/blue"></a>
 </p>
 
@@ -70,7 +71,7 @@ In the Ajax app, open the space settings and go to **Security companies → Moni
 1. **Protocol**: `SIA DC-09 (SIA-DCS)`.
 2. **IP address** and **port**: those of the machine running Homebridge, and the port from the plugin config (7777 by default). Give that machine a fixed address or a DHCP reservation.
 3. **Object number** (**Site number** in the app): pick any hexadecimal value, 3 to 16 characters, for example `AB12`. It is only an identifier that the hub puts in every message: the plugin ignores messages carrying another one. It has to match `accountId` in the plugin.
-4. **Encryption** (recommended): enable it and set a key of 16 characters. Put the same key in the plugin.
+4. **Encryption** (strongly recommended, see [Securing the listener](#securing-the-listener)): enable it and set a key of 16 characters. Put the same key in the plugin.
 5. **Periodic test**: enable it, for example every minute, if you want the plugin to notice a silent hub (see `heartbeatTimeoutMinutes`).
 6. Keep only the channels that can reach your server. Ethernet is the most reliable; a cellular channel cannot reach a private address, so turn it off for this connection. With OS Malevich 2.16 or later you can also turn off **One IP address for all alarm channels** to give each channel its own address.
 
@@ -116,6 +117,24 @@ Use the Homebridge UI, or add a platform to `config.json`:
 | `heartbeatTimeoutMinutes` | `0` | Report a fault when the hub is silent this long. `0` disables it. |
 | `maxTimeSkewSeconds` | `60` | Refuse timestamped messages further than this from the server clock. `0` disables it. |
 | `allowedAddresses` | `[]` | Only accept traffic from these IP addresses. |
+
+### Securing the listener
+
+By default the plugin listens on every interface of the machine (`0.0.0.0`, port 7777) and accepts messages from any device on your network. Without protection, anyone on that network could send it a fake event, such as an alarm or a disarm, and the HomeKit tile would follow. Use both of these:
+
+- **Encryption.** Enable it on the hub and set the same `encryptionKey` in the plugin. The plugin then refuses unencrypted messages and any message that does not decrypt with your key, so only the hub can talk to it. This is the protection that matters most.
+- **`allowedAddresses`.** List the address of the hub: the plugin drops traffic from any other address before reading it. Give the hub a fixed address or a DHCP reservation first.
+
+```json
+{
+  "platform": "AjaxSia",
+  "accountId": "AB12",
+  "encryptionKey": "0123456789abcdef",
+  "allowedAddresses": ["192.168.1.50"]
+}
+```
+
+If Homebridge runs on a machine with several network interfaces, `listenAddress` can also be set to the address of the one that faces the hub. Never expose port 7777 to the internet.
 
 ### Finding a detector's zone number
 
