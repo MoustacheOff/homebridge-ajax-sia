@@ -217,7 +217,7 @@ SIA only listens. To arm, disarm and switch to night mode from Apple Home, and t
 | `discoverDevices` | `true` | Expose the motion, door, smoke and leak detectors of the account that are not under `devices`. Sirens, keyfobs, keypads and the hub are not exposed. A detector that leaves the account is removed. |
 | `temperatureSensors` | `true` | Add a temperature sensor to the detectors that report one. |
 | `deviceModel`, `deviceOs` | `Homebridge`, the host's OS and version | How the plugin is named in the list of sessions of the account. The OS is read from the machine, for example `Debian GNU/Linux bookworm 12.15 aarch64` or `macOS 27.0.1`. |
-| `clientVersion` | `3.57` | App version announced to Ajax. The default follows the latest release of the Ajax app on the App Store, checked daily and shipped with plugin updates. Raise it yourself if the log says Ajax no longer accepts the client. |
+| `clientVersion` | `3.58` | App version announced to Ajax. The default follows the latest release of the Ajax app on the App Store, checked daily and shipped with plugin updates. Raise it yourself if the log says Ajax no longer accepts the client. |
 
 A command that is refused (hub busy, malfunction to acknowledge, no permission) is logged with the reason and reported to HomeKit as a failure. The device id and session are kept in the Homebridge storage folder (`homebridge-ajax-sia-cloud.json`, readable by its owner only), so a restart does not open a new session.
 

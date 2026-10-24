@@ -284,7 +284,7 @@
           "clientVersion": {
             "title": "Announced app version",
             "type": "string",
-            "default": "3.57",
+            "default": "3.58",
             "description": "Raise it if the log says Ajax no longer accepts this client.",
             "condition": {
               "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
