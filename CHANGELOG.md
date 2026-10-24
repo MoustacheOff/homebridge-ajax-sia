@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - The README has a section on securing the listener (encryption and `allowedAddresses`), as the Homebridge team suggested when verifying the plugin, and carries the Verified by Homebridge badge.
 
+### Changed
+
+- The default Ajax app version announced to Ajax is now 3.58, the latest on the App Store.
+
 ## [1.1.2] - 2026-10-12
 
 ### Fixed
