@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.1.4] - 2026-11-14
+
 ### Changed
 
 - The default Ajax app version announced to Ajax is now 3.60, the latest on the App Store.
@@ -92,7 +94,8 @@ First release.
   - The plugin names itself `Homebridge`, with the operating system it runs on (read from the machine, for example `Debian GNU/Linux bookworm 12.15 aarch64` or `macOS 27.0.1`), in the list of sessions of the Ajax account, and renames its session when that name changes.
 - `scripts/probe.mjs`, a read-only check of an Ajax account that ends its session when it exits.
 
-[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.3...HEAD
+[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.4...HEAD
+[1.1.4]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.0...v1.1.1
