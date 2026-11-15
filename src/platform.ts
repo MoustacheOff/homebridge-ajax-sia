@@ -9,6 +9,7 @@ import { sensorKind } from './cloud/deviceTypes.js';
 import { GrpcChannel } from './cloud/grpc.js';
 import { CloudStore } from './cloud/store.js';
 import { parseConfig, type Config } from './config.js';
+import { describeCode } from './sia/codes.js';
 import { SiaReceiver } from './sia/receiver.js';
 import { SiaServer } from './sia/server.js';
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js';
@@ -96,6 +97,10 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       model.setOffline(false);
       if (message.events.length === 0) {
         this.log.debug('Link test received from the hub');
+      }
+      if (message.repeat) {
+        this.log.debug(`Repeat of message ${message.sequence} ignored (the hub did not see the acknowledgement)`);
+        return;
       }
       for (const event of message.events) {
         this.log.debug(`Event ${JSON.stringify(event)}`);
@@ -390,7 +395,10 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       const alarm = hub.alarm ? ' ALARM' : '';
       this.log.info(`Hub: ${hub.arm}${alarm}${hub.tampered ? ', tampered' : ''}${hub.fault ? ', fault' : ''}`);
     });
-    model.on('ignored', (event) => this.log.debug(`Ignored event ${event.code}${event.zone !== undefined ? ` (zone ${event.zone})` : ''}`));
+    model.on('ignored', (event) => {
+      const name = describeCode(event.code);
+      this.log.debug(`Ignored event ${event.code}${name ? ` (${name})` : ''}${event.zone !== undefined ? `, zone ${event.zone}` : ''}`);
+    });
   }
 
   private announceUnknownZone(config: Config, code: string, zone: number | undefined): void {

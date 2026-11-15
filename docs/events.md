@@ -2,7 +2,9 @@
 
 Events are `Nri<area>/<code><zone>`, for example `Nri1/BA12`: code `BA` (burglary alarm) on zone 12 in area 1. For arming codes the number after the code is a user, not a zone.
 
-Anything not listed is ignored and logged at debug level.
+Anything not listed is ignored and logged at debug level, with its name when it is a code Ajax documents.
+
+A hub sends a message again when it does not see the acknowledgement. A copy received within two minutes (same sequence number and same content) is acknowledged but not applied a second time.
 
 ## Arming
 

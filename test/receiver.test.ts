@@ -121,3 +121,53 @@ describe('SiaReceiver (encrypted)', () => {
     expect(message?.events).toEqual([]);
   });
 });
+
+describe('SiaReceiver repeats', () => {
+  const frame = (sequence: string, data = 'Nri1/BA001') => unframe(hubMessage({ sequence, data, at: NOW }));
+  const later = (seconds: number) => new Date(NOW.getTime() + seconds * 1000);
+
+  it('acknowledges a message the hub sends again but flags it as a repeat', () => {
+    const receiver = new SiaReceiver({ account: ACCOUNT, maxTimeSkewSeconds: 0 });
+    const first = receiver.receive(frame('0042'), NOW);
+    const again = receiver.receive(frame('0042'), later(10));
+
+    expect(first.message?.repeat).toBeUndefined();
+    expect(verdict(again.reply)).toBe('ACK');
+    expect(again.message).toMatchObject({ sequence: '0042', repeat: true });
+    expect(again.message?.events).toEqual(first.message?.events);
+  });
+
+  it('recognises a repeat of an encrypted message', () => {
+    const receiver = new SiaReceiver({ account: ACCOUNT, key: KEY, maxTimeSkewSeconds: 0 });
+    const sent = unframe(hubMessage({ sequence: '0042', data: 'Nri1/BA001', key: KEY, at: NOW }));
+    expect(receiver.receive(sent, NOW).message?.repeat).toBeUndefined();
+    expect(receiver.receive(sent, later(5)).message?.repeat).toBe(true);
+  });
+
+  it('treats a different sequence number or different content as new', () => {
+    const receiver = new SiaReceiver({ account: ACCOUNT, maxTimeSkewSeconds: 0 });
+    receiver.receive(frame('0042'), NOW);
+    expect(receiver.receive(frame('0043'), later(1)).message?.repeat).toBeUndefined();
+    expect(receiver.receive(frame('0042', 'Nri1/BR001'), later(2)).message?.repeat).toBeUndefined();
+  });
+
+  it('forgets a message after two minutes', () => {
+    const receiver = new SiaReceiver({ account: ACCOUNT, maxTimeSkewSeconds: 0 });
+    receiver.receive(frame('0042'), NOW);
+    expect(receiver.receive(frame('0042'), later(121)).message?.repeat).toBeUndefined();
+  });
+
+  it('never flags a link test', () => {
+    const receiver = new SiaReceiver({ account: ACCOUNT, maxTimeSkewSeconds: 0 });
+    const test = unframe(hubMessage({ id: 'NULL', sequence: '0042' }));
+    receiver.receive(test, NOW);
+    expect(receiver.receive(test, later(1)).message?.repeat).toBeUndefined();
+  });
+
+  it('does not remember a message it refused', () => {
+    const receiver = new SiaReceiver({ account: ACCOUNT, maxTimeSkewSeconds: 60 });
+    const stale = unframe(hubMessage({ sequence: '0042', data: 'Nri1/BA001', at: later(-3600) }));
+    expect(receiver.receive(stale, NOW).problem).toMatch(/clock/);
+    expect(receiver.receive(stale, later(1)).problem).toMatch(/clock/);
+  });
+});

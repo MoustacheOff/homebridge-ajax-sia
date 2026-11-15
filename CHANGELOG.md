@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- Events the plugin does not use are now named in the debug log (`Ignored event YC (Hub is offline)`), taken from the Ajax code list.
+
+### Fixed
+
+- A message the hub sends again because it did not see the acknowledgement is applied once. It is still acknowledged, and still counts as a sign that the hub is alive.
+
 ## [1.1.4] - 2026-11-14
 
 ### Changed

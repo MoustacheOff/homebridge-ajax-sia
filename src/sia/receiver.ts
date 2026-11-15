@@ -16,6 +16,8 @@ export interface Message {
   sequence: string;
   events: SiaEvent[];
   timestamp?: Date;
+  /** The hub sent this exact message a moment ago (its acknowledgement was probably lost). Do not apply it twice. */
+  repeat?: boolean;
 }
 
 export interface Reception {
@@ -29,11 +31,17 @@ export interface Reception {
 
 type Verdict = 'ACK' | 'NAK' | 'DUH';
 
+/** A hub sends a message again when it did not see the acknowledgement; this is how long the copy is recognised. */
+const REPEAT_WINDOW_MS = 2 * 60_000;
+
 /**
  * Protocol logic of a SIA DC-09 receiver: validates a message and produces the
  * reply the hub expects. Pure and transport-agnostic.
  */
 export class SiaReceiver {
+  /** Messages accepted recently, by sequence number and content, with the time they arrived. */
+  private readonly recent = new Map<string, number>();
+
   constructor(private readonly options: ReceiverOptions) {}
 
   receive(line: string, now: Date = new Date()): Reception {
@@ -90,8 +98,25 @@ export class SiaReceiver {
         sequence: frame.sequence,
         events: block.events,
         ...(block.timestamp ? { timestamp: block.timestamp } : {}),
+        ...(block.events.length > 0 && this.isRepeat(frame.sequence, content, now) ? { repeat: true } : {}),
       },
     };
+  }
+
+  /** Whether this message was already accepted within the repeat window. Records it otherwise. */
+  private isRepeat(sequence: string, content: string, now: Date): boolean {
+    const time = now.getTime();
+    for (const [key, seen] of this.recent) {
+      if (time - seen > REPEAT_WINDOW_MS) {
+        this.recent.delete(key);
+      }
+    }
+    const key = `${sequence}|${content}`;
+    if (this.recent.has(key)) {
+      return true;
+    }
+    this.recent.set(key, time);
+    return false;
   }
 
   /** Returns the plain data block, or the reason it cannot be read. */
