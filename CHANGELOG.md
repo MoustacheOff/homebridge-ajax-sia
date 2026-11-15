@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- The documentation no longer says that **Connect on demand** stops the hub from sending test reports, which Ajax does not state.
+
 ## [1.2.0] - 2026-11-15
 
 ### Added

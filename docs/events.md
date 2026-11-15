@@ -52,7 +52,7 @@ Zone `0`, or no zone, always means the hub itself.
 
 ## Link tests
 
-`NULL` messages and automatic test reports (`RP`) only prove the hub is alive. They are acknowledged and, with `heartbeatTimeoutMinutes`, keep the hub from being reported as silent. The hub sends them only when **Periodic test** is on and **Connect on demand** is off.
+`NULL` messages and automatic test reports (`RP`) only prove the hub is alive. They are acknowledged and, with `heartbeatTimeoutMinutes`, keep the hub from being reported as silent. The hub sends the test reports only when **Periodic test** is on, which it is not by default.
 
 ## Known limits
 
