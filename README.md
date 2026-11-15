@@ -178,10 +178,11 @@ The complete list of handled SIA codes is in [docs/events.md](docs/events.md).
 SIA only listens. To arm, disarm and switch to night mode from Apple Home, and to know more about your detectors, the plugin can also talk to the Ajax cloud the way the Ajax mobile apps do. It then:
 
 - sends **Away**, **Night** and **Off** from the Home app, Siri and automations to the hub,
-- reads the real state at startup, after each command and every hour, so HomeKit is right even after a restart,
+- reads the real state at startup, after each command and every `syncIntervalMinutes`, so HomeKit is right even after a restart,
 - reads your **detectors** from the account: it shows their **battery level**, flags a detector that is **offline**, in **malfunction** or opened (**tamper**), and gives each its real **model and serial number**,
 - adds a **temperature sensor** to the detectors that measure it (`temperatureSensors`). Unlike motion and contact sensors, Apple Home shows temperatures as tiles,
 - **finds the detectors you did not list** under `devices` and exposes them with the name they have in the Ajax app (`discoverDevices`). A detector you list keeps your own name. The number of a device in the Ajax app is its zone, which is how the two are matched,
+- **follows the detectors live** (`liveUpdates`, on like the other options here once the account is set): it keeps a connection open to the account, as the Ajax app does, so a battery, a tamper or a detector that goes offline shows as it happens instead of at the next read. The connection is opened again by itself after a loss, waiting longer after each failure,
 - keeps using SIA for instant events.
 
 > **Read this first.** This uses the protocol of the Ajax mobile apps. It is **not** an official API: Ajax can change it or block it without notice (it has already retired old client versions), and the Ajax end user agreement restricts reverse engineering of its software and allows Ajax to terminate an account that breaks it. **Nobody can promise that an account will never be restricted.** Using this feature is your decision, at your own risk. It is off by default; SIA alone never contacts the Ajax cloud.
@@ -216,6 +217,7 @@ SIA only listens. To arm, disarm and switch to night mode from Apple Home, and t
 | `syncIntervalMinutes` | `60` | How often to read the real state and the devices. `0` reads only at startup and after a command. |
 | `discoverDevices` | `true` | Expose the motion, door, smoke and leak detectors of the account that are not under `devices`. Sirens, keyfobs, keypads and the hub are not exposed. A detector that leaves the account is removed. |
 | `temperatureSensors` | `true` | Add a temperature sensor to the detectors that report one. |
+| `liveUpdates` | `true` | Keep a connection open to the account to follow the detectors live. Only used when the account is set. Turn it off to read them only every `syncIntervalMinutes`. |
 | `deviceModel`, `deviceOs` | `Homebridge`, the host's OS and version | How the plugin is named in the list of sessions of the account. The OS is read from the machine, for example `Debian GNU/Linux bookworm 12.15 aarch64` or `macOS 27.0.1`. |
 | `clientVersion` | `3.60` | App version announced to Ajax. The default follows the latest release of the Ajax app on the App Store, checked daily and shipped with plugin updates. Raise it yourself if the log says Ajax no longer accepts the client. |
 

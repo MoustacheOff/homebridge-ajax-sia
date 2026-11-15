@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { GrpcChannel, GrpcError, GrpcStatus, type Metadata } from './grpc.js';
+import { GrpcChannel, GrpcError, GrpcStatus, type Metadata, type Stream } from './grpc.js';
 import { familyName } from './deviceTypes.js';
 import { hostDescription } from './host.js';
 import { Message, Writer } from './protobuf.js';
@@ -43,6 +43,16 @@ export interface CloudDevice {
   signal?: string;
   /** In degrees Celsius, for the devices that measure it. */
   temperature?: number;
+}
+
+/** What {@link AjaxCloud.watchDevices} reports. */
+export interface DeviceListener {
+  /** The devices of the space, whole, each time something about them changed. */
+  devices(devices: CloudDevice[]): void;
+  /** The stream ended; `error` is unset when Ajax closed it normally. */
+  end(error?: CloudError): void;
+  /** A message could not be read and was skipped. */
+  skipped?(error: Error): void;
 }
 
 export type FailureReason =
@@ -147,6 +157,13 @@ export class AjaxCloud {
     return this.session;
   }
 
+  /** Logs in unless there is a session already. */
+  async ensureSession(): Promise<void> {
+    if (!this.session) {
+      await this.login();
+    }
+  }
+
   async login(): Promise<Session> {
     const request = new Writer()
       .string(1, this.options.email)
@@ -248,6 +265,69 @@ export class AjaxCloud {
     return parseDevices(snapshot);
   }
 
+  /**
+   * Follows the devices of a space as the Ajax app does: keeps the stream open and reports the whole list each time
+   * it changes, the first time with the `Snapshot`. Needs a session (see {@link login}); does not reconnect by itself.
+   */
+  watchDevices(spaceId: string, listener: DeviceListener): Stream {
+    if (!this.session) {
+      throw new CloudError('unauthenticated', 'Not logged in to Ajax');
+    }
+    const book = new DeviceBook();
+    let last = '';
+    const report = () => {
+      const devices = book.list();
+      const signature = JSON.stringify(devices);
+      if (signature !== last) {
+        last = signature;
+        listener.devices(devices);
+      }
+    };
+
+    const request = new Writer().string(1, spaceId, true).finish();
+    const stream: Stream = this.channel.stream(STREAM_DEVICES, request, this.sessionMetadata(), {
+      message: (payload) => {
+        let response: Message;
+        try {
+          response = Message.decode(payload);
+        } catch (error) {
+          listener.skipped?.(error as Error);
+          return;
+        }
+        const success = response.message(1);
+        if (!success) {
+          stream.close();
+          listener.end(new CloudError('rejected', 'Ajax refused to stream the devices'));
+          return;
+        }
+        try {
+          const snapshot = success.message(1);
+          if (snapshot) {
+            book.load(snapshot);
+            report();
+          } else {
+            const updates = success.message(2);
+            if (updates && book.apply(updates)) {
+              report();
+            }
+          }
+        } catch (error) {
+          // One update that cannot be read must not end the stream: the next snapshot puts everything right.
+          listener.skipped?.(error as Error);
+        }
+      },
+      end: (error) => {
+        const reason = error ? translate(error) : undefined;
+        if (reason?.reason === 'unauthenticated') {
+          // The session is no longer good: the next attempt has to log in again.
+          this.session = undefined;
+        }
+        listener.end(reason);
+      },
+    });
+    return stream;
+  }
+
   /** Sends one arming command. A request to reach the state the space is already in counts as success. */
   async command(spaceId: string, command: Command): Promise<void> {
     const locator = new Writer().string(1, spaceId, true);
@@ -335,61 +415,178 @@ function translate(error: GrpcError): CloudError {
 
 const SIGNALS = ['', 'none', 'weak', 'normal', 'strong', 'disconnected'];
 const STATE_OFFLINE = 9;
+const UPDATE_REMOVE = 3;
 
 /** Field numbers of `LightDeviceStatus` this client reads. */
 const STATUS = { signal: 2, battery: 9, caseDrilling: 19, malfunction: 50, temperature: 73, lidOpened: 82 } as const;
 
-/** Reads the `Snapshot` of the stream of devices: one `LightDevice` per device, of which only the hub devices matter here. */
-export function parseDevices(snapshot: Message): CloudDevice[] {
-  const devices: CloudDevice[] = [];
-  for (const light of snapshot.messages(1)) {
-    const common = light.message(1)?.message(1);
-    const profile = common?.message(1);
-    if (!common || !profile) {
-      continue;
-    }
+/** What the stream says about one hub device, before it is boiled down to a {@link CloudDevice}. */
+interface Raw {
+  id: string;
+  hubId: string;
+  name: string;
+  index: number;
+  family?: string;
+  bypassed: boolean;
+  malfunctions: number;
+  states: Set<number>;
+  /** By the number of the `oneof` case, which is the kind of status. A status that goes away is deleted. */
+  statuses: Map<number, Message>;
+}
 
-    const device: CloudDevice = {
-      id: profile.string(1),
-      hubId: common.string(2),
-      name: profile.string(2),
-      index: profile.int32(11),
-      online: !profile.varints(8).includes(STATE_OFFLINE),
-      bypassed: profile.varint(12) === 1,
-      malfunction: profile.varint(7) > 0,
-      tampered: false,
-    };
-    const family = familyName(common.message(3)?.numbers[0] ?? 0);
-    if (family) {
-      device.family = family;
-    }
+/** Device ids are unique within a hub. */
+const key = (hubId: string, id: string): string => `${hubId}/${id}`;
 
-    for (const status of profile.messages(9)) {
-      const [kind] = status.numbers;
-      switch (kind) {
-        case STATUS.battery: {
-          const battery = status.message(kind)!;
-          // 1 is "ok"; the other states are the battery asking for attention, from a warning to an error.
-          device.batteryPercent = battery.varint(2);
-          device.batteryLow = battery.varint(1) > 1;
-          break;
-        }
-        case STATUS.signal:
-          device.signal = SIGNALS[status.message(kind)?.varint(1) ?? 0] || undefined;
-          break;
-        case STATUS.temperature:
-          device.temperature = status.message(kind)!.int32(1);
-          break;
-        case STATUS.lidOpened:
-        case STATUS.caseDrilling:
-          device.tampered = true;
-          break;
-        case STATUS.malfunction:
-          device.malfunction = true;
-          break;
+function rawDevice(light: Message | undefined): Raw | undefined {
+  const common = light?.message(1)?.message(1);
+  const profile = common?.message(1);
+  if (!common || !profile) {
+    return undefined;
+  }
+  const raw: Raw = {
+    id: profile.string(1),
+    hubId: common.string(2),
+    name: profile.string(2),
+    index: profile.int32(11),
+    bypassed: profile.varint(12) === 1,
+    malfunctions: profile.varint(7),
+    states: new Set(profile.varints(8)),
+    statuses: new Map(),
+  };
+  const family = familyName(common.message(3)?.numbers[0] ?? 0);
+  if (family) {
+    raw.family = family;
+  }
+  for (const status of profile.messages(9)) {
+    const [kind] = status.numbers;
+    if (kind !== undefined) {
+      raw.statuses.set(kind, status);
+    }
+  }
+  return raw;
+}
+
+function toDevice(raw: Raw): CloudDevice {
+  const device: CloudDevice = {
+    id: raw.id,
+    hubId: raw.hubId,
+    name: raw.name,
+    index: raw.index,
+    online: !raw.states.has(STATE_OFFLINE),
+    bypassed: raw.bypassed,
+    malfunction: raw.malfunctions > 0,
+    tampered: false,
+  };
+  if (raw.family) {
+    device.family = raw.family;
+  }
+  for (const [kind, status] of raw.statuses) {
+    switch (kind) {
+      case STATUS.battery: {
+        const battery = status.message(kind)!;
+        // 1 is "ok"; the other states are the battery asking for attention, from a warning to an error.
+        device.batteryPercent = battery.varint(2);
+        device.batteryLow = battery.varint(1) > 1;
+        break;
+      }
+      case STATUS.signal:
+        device.signal = SIGNALS[status.message(kind)?.varint(1) ?? 0] || undefined;
+        break;
+      case STATUS.temperature:
+        device.temperature = status.message(kind)!.int32(1);
+        break;
+      case STATUS.lidOpened:
+      case STATUS.caseDrilling:
+        device.tampered = true;
+        break;
+      case STATUS.malfunction:
+        device.malfunction = true;
+        break;
+    }
+  }
+  return device;
+}
+
+/**
+ * The hub devices of a space as the stream of devices describes them: a `Snapshot` first, then updates that
+ * add or remove a status, change the states or the malfunctions, or replace a device.
+ */
+export class DeviceBook {
+  private readonly devices = new Map<string, Raw>();
+
+  /** Replaces everything with the `Snapshot`. Only the hub devices matter here. */
+  load(snapshot: Message): void {
+    this.devices.clear();
+    for (const light of snapshot.messages(1)) {
+      const raw = rawDevice(light);
+      if (raw) {
+        this.devices.set(key(raw.hubId, raw.id), raw);
       }
     }
-    devices.push(device);
   }
-  return devices;
+
+  /** Applies an `Updates` message. Returns whether a device of the hub was touched. */
+  apply(updates: Message): boolean {
+    let touched = false;
+    for (const update of updates.messages(1)) {
+      const identity = update.message(1)?.message(1);
+      const id = key(identity?.string(2) ?? '', identity?.string(1) ?? '');
+      const [kind] = update.numbers.filter((field) => field !== 1);
+
+      if (kind === 2) {
+        const replacement = update.message(2)!;
+        if (replacement.varint(2) === UPDATE_REMOVE) {
+          touched = this.devices.delete(id) || touched;
+          continue;
+        }
+        const raw = rawDevice(replacement.message(1));
+        if (raw) {
+          this.devices.set(key(raw.hubId, raw.id), raw);
+          touched = true;
+        }
+        continue;
+      }
+
+      const raw = this.devices.get(id);
+      if (!raw) {
+        continue;
+      }
+      if (kind === 3) {
+        const change = update.message(3)!;
+        const status = change.message(1);
+        const [statusKind] = status?.numbers ?? [];
+        if (status && statusKind !== undefined) {
+          if (change.varint(2) === UPDATE_REMOVE) {
+            raw.statuses.delete(statusKind);
+          } else {
+            raw.statuses.set(statusKind, status);
+          }
+          touched = true;
+        }
+      } else if (kind === 4) {
+        raw.malfunctions = update.varint(4);
+        touched = true;
+      } else if (kind === 5) {
+        const change = update.message(5)!;
+        if (change.varint(2) === UPDATE_REMOVE) {
+          raw.states.delete(change.varint(1));
+        } else {
+          raw.states.add(change.varint(1));
+        }
+        touched = true;
+      }
+    }
+    return touched;
+  }
+
+  list(): CloudDevice[] {
+    return [...this.devices.values()].map(toDevice);
+  }
+}
+
+/** Reads the `Snapshot` of the stream of devices: one `LightDevice` per device, of which only the hub devices matter here. */
+export function parseDevices(snapshot: Message): CloudDevice[] {
+  const book = new DeviceBook();
+  book.load(snapshot);
+  return book.list();
 }

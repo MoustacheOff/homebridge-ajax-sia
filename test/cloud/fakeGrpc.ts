@@ -1,4 +1,4 @@
-import { createServer, type Http2Server } from 'node:http2';
+import { createServer, type Http2Server, type ServerHttp2Stream } from 'node:http2';
 import type { AddressInfo } from 'node:net';
 
 export const frame = (message: Buffer): Buffer => {
@@ -29,6 +29,9 @@ export class FakeGrpcServer {
   readonly calls: Call[] = [];
   /** Streams the client hung up on, so a test can tell that it did. */
   streamsClosedByClient = 0;
+  /** The streams still open, to which a test can push more messages. */
+  readonly open: ServerHttp2Stream[] = [];
+  private readonly endings = new WeakMap<ServerHttp2Stream, { status: number; text: string }>();
   private server?: Http2Server;
   handler: (call: Call) => Reply = () => ({ status: 12 });
 
@@ -48,11 +51,22 @@ export class FakeGrpcServer {
         }
 
         if ('stream' in reply) {
-          stream.respond({ ':status': 200, 'content-type': 'application/grpc' });
+          stream.respond({ ':status': 200, 'content-type': 'application/grpc' }, { waitForTrailers: true });
+          stream.on('wantTrailers', () => {
+            const ending = this.endings.get(stream) ?? { status: 0, text: '' };
+            stream.sendTrailers({
+              'grpc-status': String(ending.status),
+              ...(ending.text ? { 'grpc-message': encodeURIComponent(ending.text) } : {}),
+            });
+          });
           for (const message of reply.stream) {
             stream.write(frame(message));
           }
-          stream.on('close', () => void this.streamsClosedByClient++);
+          this.open.push(stream);
+          stream.on('close', () => {
+            this.streamsClosedByClient++;
+            this.open.splice(this.open.indexOf(stream), 1);
+          });
           return;
         }
 
@@ -89,6 +103,28 @@ export class FakeGrpcServer {
     });
     await new Promise<void>((resolve) => this.server!.listen(0, '127.0.0.1', resolve));
     return `http://127.0.0.1:${(this.server.address() as AddressInfo).port}`;
+  }
+
+  /** Sends one more message on every stream that is open. */
+  push(message: Buffer): void {
+    for (const stream of this.open) {
+      stream.write(frame(message));
+    }
+  }
+
+  /** Sends raw bytes on every open stream, to cut a message where a test wants. */
+  pushRaw(bytes: Buffer): void {
+    for (const stream of this.open) {
+      stream.write(bytes);
+    }
+  }
+
+  /** Ends every open stream with a gRPC status, as a server that is done does. */
+  endStreams(status = 0, text = ''): void {
+    for (const stream of [...this.open]) {
+      this.endings.set(stream, { status, text });
+      stream.end();
+    }
   }
 
   async stop(): Promise<void> {

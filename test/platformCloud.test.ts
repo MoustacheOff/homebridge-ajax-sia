@@ -9,7 +9,9 @@ import type { PlatformConfig } from 'homebridge';
 import { Message, Writer } from '../src/cloud/protobuf.js';
 import { AjaxSiaPlatform } from '../src/platform.js';
 import { PLATFORM_NAME } from '../src/settings.js';
-import { battery, hubDevice, snapshot, temperature } from './cloud/deviceFixtures.js';
+import {
+  UPDATE, battery, flag, hubDevice, malfunctionsUpdate, snapshot, statusUpdate, temperature, updatesMessage,
+} from './cloud/deviceFixtures.js';
 import { FakeGrpcServer, type Call, type Reply } from './cloud/fakeGrpc.js';
 import { GrpcStatus } from '../src/cloud/grpc.js';
 import { createApi, createLog, freePort } from './fakeHomebridge.js';
@@ -72,7 +74,7 @@ async function launch(
     listenAddress: '127.0.0.1',
     protocol: 'tcp',
     maxTimeSkewSeconds: 0,
-    cloud: { email: 'me@example.com', password: 'hunter2', host: origin, syncIntervalMinutes: 0, ...settings },
+    cloud: { email: 'me@example.com', password: 'hunter2', host: origin, syncIntervalMinutes: 0, liveUpdates: false, ...settings },
     ...platformSettings,
   } as PlatformConfig;
 
@@ -311,6 +313,99 @@ describe('AjaxSiaPlatform with the devices of the Ajax account', () => {
   });
 });
 
+describe('AjaxSiaPlatform following the devices live', () => {
+  const STREAM = 'StreamLightDevicesService/execute';
+  const MOTION = 2;
+  const streamsOpened = () => cloud.calls.filter((call) => call.path.endsWith(STREAM)).length;
+  const detectors = [{ zone: 1, name: 'Living room', type: 'motion' }];
+  const fault = (accessory: { getService: (service: never) => { getCharacteristic: (c: never) => { value: unknown } } | undefined }) =>
+    accessory.getService(Service.MotionSensor as never)?.getCharacteristic(Characteristic.StatusFault as never).value;
+  const tampered = (accessory: { getService: (service: never) => { getCharacteristic: (c: never) => { value: unknown } } | undefined }) =>
+    accessory.getService(Service.MotionSensor as never)?.getCharacteristic(Characteristic.StatusTampered as never).value;
+
+  beforeEach(() => {
+    handlers[STREAM] = () => ({
+      stream: [snapshot(hubDevice({ id: 'D1', name: 'MotionProtect', index: 1, type: MOTION, statuses: [battery(1, 80)] }))],
+    });
+  });
+
+  it('opens the stream once, instead of reading the devices on its own, and says so', async () => {
+    const { messages } = await launch({ liveUpdates: true }, undefined, { devices: detectors });
+    await vi.waitFor(() => expect(messages.info.some((line) => line.includes('Following the devices of your Ajax account live')))
+      .toBe(true));
+    expect(streamsOpened()).toBe(1);
+    expect(cloud.calls.filter((call) => call.path.endsWith('LoginByPasswordService/execute'))).toHaveLength(1);
+  });
+
+  it('shows in HomeKit a change that Ajax pushes, without another read', async () => {
+    const { registered } = await launch({ liveUpdates: true }, undefined, { devices: detectors });
+    const room = registered.find((accessory) => accessory.displayName === 'Living room')!;
+    await vi.waitFor(() => expect(cloud.open.length).toBe(1));
+    expect(tampered(room)).toBe(0);
+
+    cloud.push(updatesMessage(statusUpdate('D1', flag(82), UPDATE.add)));
+    await vi.waitFor(() => expect(tampered(room)).toBe(1));
+    cloud.push(updatesMessage(statusUpdate('D1', flag(82), UPDATE.remove)));
+    await vi.waitFor(() => expect(tampered(room)).toBe(0));
+    cloud.push(updatesMessage(malfunctionsUpdate('D1', 1)));
+    await vi.waitFor(() => expect(fault(room)).toBe(1));
+    expect(streamsOpened()).toBe(1);
+  });
+
+  it('says when it loses the link, and opens the stream again', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      const { messages } = await launch({ liveUpdates: true }, undefined, { devices: detectors });
+      await vi.waitFor(() => expect(cloud.open.length).toBe(1));
+
+      cloud.endStreams(GrpcStatus.UNAVAILABLE, 'connection reset');
+      await vi.waitFor(() => expect(messages.warn.some((line) => line.includes('Lost the live link to Ajax'))).toBe(true));
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.waitFor(() => expect(messages.info.some((line) => line.includes('The live link to Ajax is back'))).toBe(true));
+      expect(streamsOpened()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('logs in again when Ajax says the session is no longer good', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      await launch({ liveUpdates: true }, undefined, { devices: detectors });
+      await vi.waitFor(() => expect(cloud.open.length).toBe(1));
+
+      cloud.endStreams(GrpcStatus.UNAUTHENTICATED, 'expired');
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.waitFor(() => expect(streamsOpened()).toBe(2));
+      expect(cloud.calls.filter((call) => call.path.endsWith('LoginByPasswordService/execute'))).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops asking when Ajax has retired the client version', async () => {
+    handlers[STREAM] = () => ({ status: GrpcStatus.PERMISSION_DENIED, text: 'client version is in blacklist' });
+    const { messages } = await launch({ liveUpdates: true }, undefined, { devices: detectors });
+    await vi.waitFor(() => expect(messages.error.some((line) => line.includes('Calls to Ajax are stopped'))).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(streamsOpened()).toBe(1);
+  });
+
+  it('closes the stream when Homebridge shuts down', async () => {
+    const closedBefore = cloud.streamsClosedByClient;
+    await launch({ liveUpdates: true }, undefined, { devices: detectors });
+    await vi.waitFor(() => expect(cloud.open.length).toBe(1));
+    shutdown?.();
+    await vi.waitFor(() => expect(cloud.streamsClosedByClient).toBe(closedBefore + 1));
+  });
+
+  it('reads the devices the old way when the user turned it off', async () => {
+    const { messages } = await launch({ liveUpdates: false }, undefined, { devices: detectors });
+    await vi.waitFor(() => expect(messages.info.some((line) => line.includes('Read 1 devices'))).toBe(true));
+    expect(messages.info.some((line) => line.includes('live'))).toBe(false);
+  });
+});
+
 describe('AjaxSiaPlatform renaming itself in the Ajax account', () => {
   const LOGIN_PATH = 'LoginByPasswordService/execute';
   const LOGOUT_PATH = 'LogoutService/execute';
@@ -409,6 +504,24 @@ describe('AjaxSiaPlatform without cloud settings', () => {
 
     const target = registered[0]!.getService(Service.SecuritySystem)!.getCharacteristic(Target);
     expect(target.props.perms).not.toContain(hap.Perms.PAIRED_WRITE);
+    emit('shutdown');
+  });
+
+  it('does not contact Ajax without an account, and says what is missing instead of guessing', async () => {
+    const origin = await cloud.start();
+    const { api, emit } = createApi();
+    const { log, messages } = createLog();
+    const port = await freePort();
+    const config = {
+      platform: PLATFORM_NAME, name: 'Ajax', accountId: ACCOUNT, port, listenAddress: '127.0.0.1', protocol: 'tcp',
+      cloud: { host: origin, liveUpdates: true, syncIntervalMinutes: 1 },
+    };
+    new AjaxSiaPlatform(log, config as PlatformConfig, api);
+    emit('didFinishLaunching');
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    expect(messages.error.some((line) => line.includes('cloud.email'))).toBe(true);
+    expect(cloud.calls).toEqual([]);
     emit('shutdown');
   });
 });

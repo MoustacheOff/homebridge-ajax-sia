@@ -37,6 +37,8 @@ export interface CloudConfig {
   discoverDevices: boolean;
   /** Add a temperature sensor to the detectors that measure it. */
   temperatureSensors: boolean;
+  /** Keep a connection open to the Ajax account, as the Ajax app does, to learn of changes as they happen. */
+  liveUpdates: boolean;
 }
 
 export interface Config {
@@ -291,5 +293,6 @@ function parseCloud(value: unknown, errors: string[]): CloudConfig | undefined {
     syncIntervalMinutes: validInterval ? (syncInterval as number) : DEFAULT_SYNC_MINUTES,
     discoverDevices: flag('discoverDevices'),
     temperatureSensors: flag('temperatureSensors'),
+    liveUpdates: flag('liveUpdates'),
   };
 }

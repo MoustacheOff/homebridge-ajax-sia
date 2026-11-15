@@ -1,5 +1,6 @@
 import type { ArmState } from '../ajax/model.js';
-import { CloudError, type AjaxCloud, type CloudDevice, type Space, type SpaceState } from './ajax.js';
+import { CloudError, type AjaxCloud, type CloudDevice, type DeviceListener, type Space, type SpaceState } from './ajax.js';
+import type { Stream } from './grpc.js';
 
 export interface Logger {
   debug(message: string): void;
@@ -48,6 +49,13 @@ export class CloudController {
   async devices(): Promise<CloudDevice[]> {
     const id = this.spaceId ?? (await this.space()).id;
     return this.cloud.devices(id);
+  }
+
+  /** Follows the devices of the space: opens the stream, which keeps reporting until it is closed. */
+  async watch(listener: DeviceListener): Promise<Stream> {
+    const id = this.spaceId ?? (await this.space()).id;
+    await this.cloud.ensureSession();
+    return this.cloud.watchDevices(id, listener);
   }
 
   /** Moves the space to `target`, from the state it is believed to be in. */

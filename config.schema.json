@@ -281,6 +281,15 @@
               "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
             }
           },
+          "liveUpdates": {
+            "title": "Follow the detectors live",
+            "type": "boolean",
+            "default": true,
+            "description": "Keep a connection open to the Ajax account, as the Ajax app does, so that a battery, a tamper or an offline detector shows as soon as it changes. Only applies once the account is set. Turn it off to read the account only at the interval above.",
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          },
           "clientVersion": {
             "title": "Announced app version",
             "type": "string",
@@ -387,6 +396,7 @@
         "cloud.syncIntervalMinutes",
         "cloud.discoverDevices",
         "cloud.temperatureSensors",
+        "cloud.liveUpdates",
         "cloud.clientVersion",
         "cloud.deviceModel",
         "cloud.deviceOs"

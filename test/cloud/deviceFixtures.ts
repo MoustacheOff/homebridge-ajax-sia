@@ -22,8 +22,12 @@ export interface Spec {
   malfunctions?: number;
 }
 
+let counter = 0;
+
 export function hubDevice(spec: Spec): Writer {
-  const profile = new Writer().string(1, spec.id ?? 'AAAA0001').string(2, spec.name ?? 'Device');
+  // Ids are unique on a hub, so two devices that were given none get different ones.
+  const id = spec.id ?? `AAAA${(++counter).toString(16).toUpperCase().padStart(4, '0')}`;
+  const profile = new Writer().string(1, id).string(2, spec.name ?? 'Device');
   if (spec.malfunctions) {
     profile.varint(7, spec.malfunctions);
   }
@@ -52,3 +56,34 @@ export const snapshot = (...devices: Writer[]) => {
   return new Writer().message(1, new Writer().message(1, list)).finish();
 };
 
+
+// Updates of the stream: `Success.updates` holds `Update`s, each for one device (`LightDeviceId.hub_light_device_id`).
+export const UPDATE = { add: 1, update: 2, remove: 3 } as const;
+
+const deviceId = (id: string, hub = 'hub-1') => new Writer().message(1, new Writer().string(1, id).string(2, hub));
+
+const updates = (...list: Writer[]) => {
+  const body = new Writer();
+  for (const update of list) {
+    body.message(1, update);
+  }
+  return new Writer().message(1, new Writer().message(2, body)).finish();
+};
+
+/** A status that appears, changes (`UPDATE.update`) or goes away (`UPDATE.remove`). */
+export const statusUpdate = (id: string, status: Writer, type: number = UPDATE.update, hub?: string) =>
+  new Writer().message(1, deviceId(id, hub)).message(3, new Writer().message(1, status).varint(2, type));
+
+export const malfunctionsUpdate = (id: string, count: number) =>
+  new Writer().message(1, deviceId(id)).varint(4, count, true);
+
+export const stateUpdate = (id: string, state: number, type: number = UPDATE.add) =>
+  new Writer().message(1, deviceId(id)).message(5, new Writer().varint(1, state).varint(2, type));
+
+export const deviceUpdate = (id: string, device: Writer, type: number = UPDATE.update) =>
+  new Writer().message(1, deviceId(id)).message(2, new Writer().message(1, device).varint(2, type));
+
+export const removal = (id: string) =>
+  new Writer().message(1, deviceId(id)).message(2, new Writer().varint(2, UPDATE.remove));
+
+export const updatesMessage = updates;

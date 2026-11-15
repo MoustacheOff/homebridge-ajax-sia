@@ -5,6 +5,7 @@ import { ZoneAccessory, type ZoneContext } from './accessories/zone.js';
 import { AjaxModel, isZoneCode } from './ajax/model.js';
 import { AjaxCloud, CloudError, sha256, type CloudDevice, type FailureReason } from './cloud/ajax.js';
 import { CloudController } from './cloud/controller.js';
+import { LiveDevices } from './cloud/live.js';
 import { sensorKind } from './cloud/deviceTypes.js';
 import { GrpcChannel } from './cloud/grpc.js';
 import { CloudStore } from './cloud/store.js';
@@ -26,8 +27,10 @@ const FATAL: ReadonlySet<FailureReason> = new Set<FailureReason>([
 /** What the cloud connection gives the rest of the plugin. */
 interface CloudLink {
   commander: Commander;
-  /** Reads the devices of the account and hands them to the accessories. */
-  readDevices: () => Promise<void>;
+  /** Starts following the devices of the account, live when it can, and hands them to the accessories. */
+  begin: () => void;
+  /** Stops following them. */
+  end: () => void;
 }
 
 /** After a command, check what the hub actually did, in case the SIA event is late or not configured. */
@@ -47,6 +50,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
   private hub?: HubAccessory;
   private watchdog?: NodeJS.Timeout;
   private cloudSync?: NodeJS.Timeout;
+  private cloudEnd?: () => void;
   private verify?: NodeJS.Timeout;
   private lastSeen = Date.now();
 
@@ -76,8 +80,9 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     const model = new AjaxModel(config.areas);
 
     const cloud = this.setupCloud(config, model);
+    this.cloudEnd = cloud?.end;
     this.setupAccessories(config, model, cloud?.commander);
-    void cloud?.readDevices();
+    cloud?.begin();
     this.observe(model);
 
     const receiver = new SiaReceiver({
@@ -122,6 +127,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
   private stop(): void {
     clearInterval(this.watchdog);
     clearInterval(this.cloudSync);
+    this.cloudEnd?.();
     clearTimeout(this.verify);
     this.hub?.dispose();
     this.zones.forEach((zone) => zone.dispose());
@@ -173,6 +179,14 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     this.log.warn('Commands from HomeKit are enabled. They use the protocol of the Ajax mobile apps, which is not an official API.');
 
     let stopped: string | undefined;
+    /** Stops every call to Ajax when `error` is one that trying again cannot fix. Returns whether it did. */
+    const protect = (error: unknown): boolean => {
+      if (error instanceof CloudError && FATAL.has(error.reason)) {
+        stopped = `Calls to Ajax are stopped to protect your account (${error.message}). Fix it, then restart Homebridge.`;
+        this.log.error(stopped);
+      }
+      return stopped !== undefined;
+    };
     const run = async <T>(task: () => Promise<T>): Promise<T> => {
       await migrated;
       if (stopped) {
@@ -181,10 +195,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       try {
         return await task();
       } catch (error) {
-        if (error instanceof CloudError && FATAL.has(error.reason)) {
-          stopped = `Calls to Ajax are stopped to protect your account (${error.message}). Fix it, then restart Homebridge.`;
-          this.log.error(stopped);
-        }
+        protect(error);
         throw error;
       }
     };
@@ -226,9 +237,39 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       }
     };
 
+    // The stream the Ajax app keeps open: batteries, tamper and offline detectors show as they change, without
+    // waiting for the next read. The read below stays as the safety net while the stream is down.
+    let wasDown = false;
+    const live = settings.liveUpdates
+      ? new LiveDevices(
+        (listener) => attempt(async () => {
+          const stream = await controller.watch(listener);
+          store.save(client.current, identity);
+          return stream;
+        }),
+        {
+          devices: (devices) => this.applyDevices(config, model, devices),
+          up: () => {
+            this.log.info(wasDown ? 'The live link to Ajax is back' : 'Following the devices of your Ajax account live');
+            wasDown = false;
+          },
+          down: (error, retryInMs) => {
+            wasDown = true;
+            if (!stopped) {
+              const why = error ? describe(error) : 'Ajax closed the stream';
+              this.log.warn(`Lost the live link to Ajax (${why}). Trying again in ${Math.round(retryInMs / 1000)} s`);
+            }
+          },
+          fatal: (error) => stopped !== undefined || protect(error),
+          retryFailed: (error) => this.log.debug(`Live link to Ajax: ${describe(error)}`),
+        },
+      )
+      : undefined;
+
     void sync();
     if (settings.syncIntervalMinutes > 0) {
-      this.cloudSync = setInterval(() => void sync().then(readDevices), settings.syncIntervalMinutes * 60_000);
+      const poll = () => void sync().then(() => (live?.connected ? undefined : readDevices()));
+      this.cloudSync = setInterval(poll, settings.syncIntervalMinutes * 60_000);
     }
 
     const commander: Commander = async (target, current) => {
@@ -243,7 +284,11 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       clearTimeout(this.verify);
       this.verify = setTimeout(() => void sync(), VERIFY_DELAY_MS);
     };
-    return { commander, readDevices };
+    return {
+      commander,
+      begin: () => (live ? live.start() : void readDevices()),
+      end: () => live?.stop(),
+    };
   }
 
   private setupAccessories(config: Config, model: AjaxModel, commander?: Commander): void {
