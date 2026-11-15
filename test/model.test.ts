@@ -63,15 +63,44 @@ describe('AjaxModel', () => {
       expect(model.hub.arm).toBe('disarmed');
     });
 
-    it.each(['CL', 'CA', 'CP', 'CF', 'CG'])('%s arms', (code) => {
+    // OS is "armed using arm switch" and CS "disarmed using arm switch": Ajax swaps the SIA standard's names.
+    it.each(['CL', 'CA', 'CP', 'CF', 'CG', 'OS', 'AF', 'CB'])('%s arms', (code) => {
       model.apply(ev(code, undefined, 1));
       expect(model.hub.arm).toBe('away');
     });
 
-    it.each(['OP', 'OA', 'OK', 'OR', 'OS', 'OG'])('%s disarms', (code) => {
+    it.each(['OP', 'OA', 'OK', 'OG', 'OB', 'CS'])('%s disarms', (code) => {
       model.apply(ev('CL', undefined, 1));
       model.apply(ev(code, undefined, 1));
       expect(model.hub.arm).toBe('disarmed');
+    });
+
+    it.each(['NL', 'NC', 'NF', 'NB'])('%s starts night mode', (code) => {
+      model.apply(ev(code, undefined, 1));
+      expect(model.hub.arm).toBe('night');
+    });
+
+    it.each(['NP', 'NO', 'ND'])('%s ends night mode', (code) => {
+      model.apply(ev('NL', undefined, 1));
+      model.apply(ev(code, undefined, 1));
+      expect(model.hub.arm).not.toBe('night');
+    });
+
+    it('arms and disarms with a key switch', () => {
+      model.apply(ev('OS', undefined, 1));
+      expect(model.hub.arm).toBe('away');
+      model.apply(ev('CS', undefined, 1));
+      expect(model.hub.arm).toBe('disarmed');
+    });
+
+    it('a restore after alarm acknowledges the alarm but does not disarm', () => {
+      model.apply(ev('CL', undefined, 1));
+      model.apply(ev('BA', 12, 1));
+      expect(model.hub.alarm).toBe(true);
+      model.apply(ev('OR', undefined, 1));
+      expect(model.hub.alarm).toBe(false);
+      expect(model.zone(12).intrusion).toBe(false);
+      expect(model.hub.arm).toBe('away');
     });
 
     it('reports a partial arm as "stay" until every area is armed', () => {
@@ -204,11 +233,62 @@ describe('AjaxModel', () => {
       expect(model.hub.fault).toBe(false);
     });
 
+    it('ignores mains and battery troubles that a device reports with its own zone', () => {
+      const ignored: SiaEvent[] = [];
+      model.on('ignored', (event) => ignored.push(event));
+      model.apply(ev('AT', 7));
+      model.apply(ev('YM', 7));
+      expect(model.hub.fault).toBe(false);
+      expect(ignored.map((event) => event.code)).toEqual(['AT', 'YM']);
+    });
+
+    it('reads the reserve battery of a device as its low battery, not the hub\'s', () => {
+      model.apply(ev('YT', 4));
+      expect(model.zone(4).lowBattery).toBe(true);
+      expect(model.hub.fault).toBe(false);
+      model.apply(ev('YR', 4));
+      expect(model.zone(4).lowBattery).toBe(false);
+    });
+
+    it('reports a missing hub battery as a fault until it is back', () => {
+      model.apply(ev('YM'));
+      expect(model.hub.fault).toBe(true);
+      model.apply(ev('YA'));
+      expect(model.hub.fault).toBe(false);
+    });
+
+    it('tracks a detector that lost contact with the hub', () => {
+      model.apply(ev('XL', 3));
+      expect(model.zone(3).offline).toBe(true);
+      model.apply(ev('XC', 3));
+      expect(model.zone(3).offline).toBe(false);
+      expect(model.hub.fault).toBe(false);
+    });
+
     it('reports a silent hub as a fault', () => {
       model.setOffline(true);
       expect(model.hub.fault).toBe(true);
       model.setOffline(false);
       expect(model.hub.fault).toBe(false);
+    });
+  });
+
+  describe('fire reset', () => {
+    it('clears a fire alarm that has no restore of its own once a user resets it', () => {
+      model.apply(ev('FA', 2));
+      expect(model.hub.alarm).toBe(true);
+      expect(model.zone(2).fire).toBe(true);
+      model.apply(ev('FC'));
+      expect(model.hub.alarm).toBe(false);
+      expect(model.zone(2).fire).toBe(false);
+    });
+
+    it('leaves other alarms alone', () => {
+      model.apply(ev('BA', 5));
+      model.apply(ev('FA', 2));
+      model.apply(ev('FC'));
+      expect(model.zone(5).intrusion).toBe(true);
+      expect(model.hub.alarm).toBe(true);
     });
   });
 

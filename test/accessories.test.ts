@@ -131,6 +131,16 @@ describe('ZoneAccessory', () => {
     expect(read(accessory, Service.MotionSensor, Characteristic.StatusLowBattery)).toBe(1);
   });
 
+  it('reports a detector that lost contact with the hub as a fault, without the Ajax account', () => {
+    const { model, zone } = setup();
+    const { accessory } = zone({ zone: 5, name: 'Hall', type: 'motion' });
+    expect(read(accessory, Service.MotionSensor, Characteristic.StatusFault)).toBe(0);
+    model.apply({ code: 'XL', zone: 5 });
+    expect(read(accessory, Service.MotionSensor, Characteristic.StatusFault)).toBe(1);
+    model.apply({ code: 'XC', zone: 5 });
+    expect(read(accessory, Service.MotionSensor, Characteristic.StatusFault)).toBe(0);
+  });
+
   describe('motion reset', () => {
     const motion = (accessory: PlatformAccessory) => read(accessory, Service.MotionSensor, Characteristic.MotionDetected);
 

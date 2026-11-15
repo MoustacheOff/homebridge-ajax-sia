@@ -6,10 +6,17 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
-- Events the plugin does not use are now named in the debug log (`Ignored event YC (Hub is offline)`), taken from the Ajax code list.
+- Events the plugin does not use are named in the debug log (`Ignored event YC (Hub is offline)`), for every code in Ajax's SIA table.
+- A detector that loses contact with the hub (`XL`) shows as faulty in HomeKit, and clears when it is back (`XC`), without needing the Ajax account.
+- A missing hub battery (`YM`) is reported as a hub fault until it is connected again (`YA`).
+- A user resetting the fire alarm state (`FC`) clears the fire alarms that have no restore of their own, such as a keypad's fire button.
 
 ### Fixed
 
+- Arming and disarming with a key switch were mixed up: `OS` is armed and `CS` is disarmed.
+- Night mode started by a scenario (`NC`), or with malfunctions present (`NF`, `NB`), and arming by a scenario (`CB`, `AF`) or a group disarmed by one (`OB`) are now recognised.
+- A restore after alarm (`OR`) acknowledges the alarm without disarming.
+- Mains and battery troubles reported by a device (a range extender, a keypad, a FireProtect...) no longer put the hub in fault. A reserve battery that is low now shows on that device.
 - A message the hub sends again because it did not see the acknowledgement is applied once. It is still acknowledged, and still counts as a sign that the hub is alive.
 
 ## [1.1.4] - 2026-11-14

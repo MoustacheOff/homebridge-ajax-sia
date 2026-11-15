@@ -20,6 +20,8 @@ export interface ZoneState {
   gas: boolean;
   tampered: boolean;
   lowBattery: boolean;
+  /** The detector lost contact with the hub (`XL`), until it reports back (`XC`). */
+  offline: boolean;
 }
 
 /** What a persisted snapshot of the arming state looks like. */
@@ -42,8 +44,14 @@ interface ModelEvents {
 /** Zone reserved for the hub itself: tamper, battery and mains events carry no zone, or zone 0. */
 const HUB_ZONE = 0;
 
-const ARMED_CODES = new Set(['CL', 'CA', 'CP', 'CF', 'CG']);
-const DISARMED_CODES = new Set(['OP', 'OA', 'OK', 'OR', 'OS', 'OG']);
+/**
+ * Ajax reports an arming as a "restore" and a disarming as an event, whatever the SIA standard calls the code:
+ * `OS` is armed with a key switch and `CS` disarmed with one. `AF` and `CB` are the scenario (automatic) variants.
+ */
+const ARMED_CODES = new Set(['CL', 'CA', 'CP', 'CF', 'CG', 'OS', 'AF', 'CB']);
+const DISARMED_CODES = new Set(['OP', 'OA', 'OK', 'OG', 'OB', 'CS']);
+/** Night mode entered: by a user (`NL`), by a scenario (`NC`), or with malfunctions present (`NF`, `NB`). */
+const NIGHT_CODES = new Set(['NL', 'NC', 'NF', 'NB']);
 /** Night mode left: from a device (`NP`), by its schedule (`NO`) or with a duress code (`ND`). */
 const NIGHT_OFF_CODES = new Set(['NP', 'NO', 'ND']);
 
@@ -69,12 +77,14 @@ const CLEARED_BY_DISARM = new Set<AlarmKind>(['intrusion', 'panic']);
 /** Alarm kinds that make the hub itself report "alarm triggered". Leaks are shown on the leak sensor only. */
 const HUB_ALARMS = new Set<AlarmKind>(['intrusion', 'fire', 'gas', 'panic']);
 
-const ZONE_CODES = new Set([...Object.keys(ALARMS), ...Object.keys(RESTORES), 'TA', 'TR', 'XT', 'XR']);
+const ZONE_CODES = new Set([...Object.keys(ALARMS), ...Object.keys(RESTORES), 'TA', 'TR', 'XT', 'XR', 'XL', 'XC']);
 
 /** Whether the number that follows this code is a zone (as opposed to a user, for instance). */
 export const isZoneCode = (code: string): boolean => ZONE_CODES.has(code);
 
-const emptyZone =(): ZoneState => ({ intrusion: false, fire: false, water: false, gas: false, tampered: false, lowBattery: false });
+const emptyZone = (): ZoneState => ({
+  intrusion: false, fire: false, water: false, gas: false, tampered: false, lowBattery: false, offline: false,
+});
 
 /**
  * The Ajax system as seen through its SIA events. Pure state machine: feed it events, listen for changes.
@@ -158,7 +168,7 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
     if (ARMED_CODES.has(code)) {
       this.armedAreas.add(event.area ?? 0);
       this.publishHub();
-    } else if (code === 'NL') {
+    } else if (NIGHT_CODES.has(code)) {
       this.night = true;
       this.publishHub();
     } else if (DISARMED_CODES.has(code)) {
@@ -166,18 +176,25 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
     } else if (NIGHT_OFF_CODES.has(code)) {
       this.night = false;
       this.publishHub();
+    } else if (code === 'OR') {
+      this.acknowledgeAlarms();
+    } else if (code === 'FC') {
+      this.clearFire();
     } else if (code in ALARMS) {
       this.raise(ALARMS[code]!, event);
     } else if (code in RESTORES) {
       this.restoreAlarm(RESTORES[code]!, event);
     } else if (code === 'TA' || code === 'TR') {
       this.setTamper(event.zone, code === 'TA');
-    } else if (code === 'XT' || code === 'XR') {
-      this.setBattery(event.zone, code === 'XT');
+    } else if (code === 'XT' || code === 'XR' || code === 'YT' || code === 'YR') {
+      // `YT`/`YR` are the hub's own battery without a zone, and a device's reserve battery with one.
+      this.setBattery(event.zone, code === 'XT' || code === 'YT');
+    } else if (code === 'XL' || code === 'XC') {
+      this.setOfflineZone(event.zone, code === 'XL');
     } else if (code === 'AT' || code === 'AR') {
-      this.setHubFault('mains', code === 'AT');
-    } else if (code === 'YT' || code === 'YR') {
-      this.setHubFault('battery', code === 'YT');
+      this.setHubOnly('mains', event, code === 'AT');
+    } else if (code === 'YM' || code === 'YA') {
+      this.setHubOnly('batteryMissing', event, code === 'YM');
     } else {
       this.emit('ignored', event);
     }
@@ -190,7 +207,11 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
       this.armedAreas.delete(area);
     }
     this.night = false;
+    this.acknowledgeAlarms();
+  }
 
+  /** Clears the alarms a disarm, or a restore after alarm (`OR`), acknowledges. Arming is left as it is. */
+  private acknowledgeAlarms(): void {
     for (const [key, kind] of this.alarms) {
       if (CLEARED_BY_DISARM.has(kind)) {
         this.alarms.delete(key);
@@ -199,6 +220,21 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
     for (const [zone, state] of this.zones) {
       if (state.intrusion) {
         this.updateZone(zone, { intrusion: false });
+      }
+    }
+    this.publishHub();
+  }
+
+  /** A user reset the fire alarm state (`FC`): the keypad's fire button and an evacuation send no restore of their own. */
+  private clearFire(): void {
+    for (const [key, kind] of this.alarms) {
+      if (kind === 'fire') {
+        this.alarms.delete(key);
+      }
+    }
+    for (const [zone, state] of this.zones) {
+      if (state.fire) {
+        this.updateZone(zone, { fire: false });
       }
     }
     this.publishHub();
@@ -235,6 +271,24 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
       this.setHubFault('battery', low);
     } else {
       this.updateZone(zone, { lowBattery: low });
+    }
+  }
+
+  private setOfflineZone(zone: number | undefined, offline: boolean): void {
+    if (zone !== undefined && zone !== HUB_ZONE) {
+      this.updateZone(zone, { offline });
+    }
+  }
+
+  /**
+   * Mains and battery codes are reported by the hub without a zone, and by devices (range extenders, keypads,
+   * power supplies) with theirs. Only the hub's own count as a hub fault.
+   */
+  private setHubOnly(name: string, event: SiaEvent, active: boolean): void {
+    if (event.zone === undefined || event.zone === HUB_ZONE) {
+      this.setHubFault(name, active);
+    } else {
+      this.emit('ignored', event);
     }
   }
 

@@ -169,7 +169,7 @@ describe('AjaxSiaPlatform', () => {
   it('names an ignored event in the log', async () => {
     const { port, messages } = await launch();
     await hubSends(port, hubMessage({ data: 'Nri1/BB2' }));
-    expect(messages.debug).toContain('Ignored event BB (Intrusion zone bypassed), zone 2');
+    expect(messages.debug).toContain('Ignored event BB (Device deactivated), zone 2');
     await hubSends(port, hubMessage({ sequence: '0002', data: 'Nri1/ZQ9' }));
     expect(messages.debug).toContain('Ignored event ZQ, zone 9');
   });

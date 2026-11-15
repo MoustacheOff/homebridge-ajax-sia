@@ -159,9 +159,9 @@ export class ZoneAccessory {
     return this.state.lowBattery || this.cloud?.batteryLow === true;
   }
 
-  /** The detector lost contact with the hub, was deactivated, or reports a malfunction. */
+  /** The detector lost contact with the hub (told by the hub itself, or seen by the Ajax account), or reports a malfunction. */
   private fault(): boolean {
-    return this.cloud !== undefined && (!this.cloud.online || this.cloud.malfunction);
+    return this.state.offline || (this.cloud !== undefined && (!this.cloud.online || this.cloud.malfunction));
   }
 
   private bindingFor(type: ZoneType): Binding {
