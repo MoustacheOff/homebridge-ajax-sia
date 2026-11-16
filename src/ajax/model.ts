@@ -9,7 +9,7 @@ export interface HubState {
   /** An alarm is active (intrusion, panic, fire, ...) and has not been cleared yet. */
   alarm: boolean;
   tampered: boolean;
-  /** Mains/battery trouble on the hub, or the hub went silent. */
+  /** Mains/battery trouble or radio interference on the hub, or the hub went silent. */
   fault: boolean;
 }
 
@@ -22,6 +22,8 @@ export interface ZoneState {
   lowBattery: boolean;
   /** The detector lost contact with the hub (`XL`), until it reports back (`XC`). */
   offline: boolean;
+  /** The detector reports a failure (`FT`), a dirty smoke chamber (`FS`) or a faulty CO sensor (`GS`), until it clears. */
+  malfunction: boolean;
 }
 
 /** What a persisted snapshot of the arming state looks like. */
@@ -77,13 +79,23 @@ const CLEARED_BY_DISARM = new Set<AlarmKind>(['intrusion', 'panic']);
 /** Alarm kinds that make the hub itself report "alarm triggered". Leaks are shown on the leak sensor only. */
 const HUB_ALARMS = new Set<AlarmKind>(['intrusion', 'fire', 'gas', 'panic']);
 
-const ZONE_CODES = new Set([...Object.keys(ALARMS), ...Object.keys(RESTORES), 'TA', 'TR', 'XT', 'XR', 'XL', 'XC']);
+/**
+ * Detector failures. They raise a fault on the zone, never an alarm. `FJ` (failure over, or smoke chamber clean)
+ * clears both `FT` and `FS`; `GX` clears `GS`. `FX` (smoke chamber test passed) says nothing about a fault, so it clears none.
+ */
+const MALFUNCTIONS: Record<string, string> = { FT: 'FT', FS: 'FS', GS: 'GS' };
+const MALFUNCTION_CLEARS = new Map<string, string[]>([['FJ', ['FT', 'FS']], ['GX', ['GS']]]);
+
+const ZONE_CODES = new Set([
+  ...Object.keys(ALARMS), ...Object.keys(RESTORES), 'TA', 'TR', 'XT', 'XR', 'XL', 'XC',
+  ...Object.keys(MALFUNCTIONS), ...MALFUNCTION_CLEARS.keys(),
+]);
 
 /** Whether the number that follows this code is a zone (as opposed to a user, for instance). */
 export const isZoneCode = (code: string): boolean => ZONE_CODES.has(code);
 
 const emptyZone = (): ZoneState => ({
-  intrusion: false, fire: false, water: false, gas: false, tampered: false, lowBattery: false, offline: false,
+  intrusion: false, fire: false, water: false, gas: false, tampered: false, lowBattery: false, offline: false, malfunction: false,
 });
 
 /**
@@ -98,6 +110,7 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
   private offline = false;
   private hubTampered = false;
   private readonly hubFaults = new Set<string>();
+  private readonly malfunctions = new Map<number, Set<string>>();
   private readonly alarms = new Map<string, AlarmKind>();
   private readonly zones = new Map<number, ZoneState>();
   private last?: HubState;
@@ -191,6 +204,11 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
       this.setBattery(event.zone, code === 'XT' || code === 'YT');
     } else if (code === 'XL' || code === 'XC') {
       this.setOfflineZone(event.zone, code === 'XL');
+    } else if (code in MALFUNCTIONS || MALFUNCTION_CLEARS.has(code)) {
+      this.setMalfunction(event);
+    } else if (code === 'XQ' || code === 'XH') {
+      // Radio interference: only the hub's own report counts.
+      this.setHubOnly('interference', event, code === 'XQ');
     } else if (code === 'AT' || code === 'AR') {
       this.setHubOnly('mains', event, code === 'AT');
     } else if (code === 'YM' || code === 'YA') {
@@ -278,6 +296,23 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
     if (zone !== undefined && zone !== HUB_ZONE) {
       this.updateZone(zone, { offline });
     }
+  }
+
+  private setMalfunction(event: SiaEvent): void {
+    const { code, zone } = event;
+    if (zone === undefined || zone === HUB_ZONE) {
+      this.emit('ignored', event);
+      return;
+    }
+    const active = this.malfunctions.get(zone) ?? new Set<string>();
+    const cleared = MALFUNCTION_CLEARS.get(code);
+    if (cleared) {
+      cleared.forEach((name) => active.delete(name));
+    } else {
+      active.add(MALFUNCTIONS[code]!);
+    }
+    this.malfunctions.set(zone, active);
+    this.updateZone(zone, { malfunction: active.size > 0 });
   }
 
   /**

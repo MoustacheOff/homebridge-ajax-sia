@@ -265,6 +265,64 @@ describe('AjaxModel', () => {
       expect(model.hub.fault).toBe(false);
     });
 
+    it('flags a detector that reports a failure, a dirty smoke chamber or a faulty CO sensor, never as an alarm', () => {
+      const alarms: string[] = [];
+      model.on('alarm', (zone, kind) => alarms.push(`${zone}:${kind}`));
+      model.apply(ev('FS', 5));
+      expect(model.zone(5).malfunction).toBe(true);
+      expect(model.zone(5).fire).toBe(false);
+      expect(model.hub.alarm).toBe(false);
+      expect(model.hub.fault).toBe(false);
+      expect(alarms).toEqual([]);
+      model.apply(ev('FJ', 5));
+      expect(model.zone(5).malfunction).toBe(false);
+    });
+
+    it('keeps a detector faulty until every one of its failures is over', () => {
+      model.apply(ev('FS', 5));
+      model.apply(ev('GS', 5));
+      model.apply(ev('FJ', 5));
+      expect(model.zone(5).malfunction).toBe(true);
+      model.apply(ev('GX', 5));
+      expect(model.zone(5).malfunction).toBe(false);
+    });
+
+    it('clears both a hardware failure and a dirty chamber with the same restore', () => {
+      model.apply(ev('FT', 6));
+      model.apply(ev('FS', 6));
+      model.apply(ev('FJ', 6));
+      expect(model.zone(6).malfunction).toBe(false);
+    });
+
+    it('does not read a passed smoke chamber test as the end of a failure', () => {
+      model.apply(ev('FS', 5));
+      model.apply(ev('FX', 5));
+      expect(model.zone(5).malfunction).toBe(true);
+    });
+
+    it('ignores a detector failure that comes with no zone', () => {
+      const ignored: SiaEvent[] = [];
+      model.on('ignored', (event) => ignored.push(event));
+      model.apply(ev('FT'));
+      expect(ignored.map((event) => event.code)).toEqual(['FT']);
+      expect(model.hub.fault).toBe(false);
+    });
+
+    it('reports radio interference at the hub as a fault until it is back to normal', () => {
+      model.apply(ev('XQ'));
+      expect(model.hub.fault).toBe(true);
+      model.apply(ev('XH'));
+      expect(model.hub.fault).toBe(false);
+    });
+
+    it('ignores radio interference that a device reports with its own zone', () => {
+      const ignored: SiaEvent[] = [];
+      model.on('ignored', (event) => ignored.push(event));
+      model.apply(ev('XQ', 4));
+      expect(model.hub.fault).toBe(false);
+      expect(ignored.map((event) => event.code)).toEqual(['XQ']);
+    });
+
     it('reports a silent hub as a fault', () => {
       model.setOffline(true);
       expect(model.hub.fault).toBe(true);

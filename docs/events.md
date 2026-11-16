@@ -45,6 +45,10 @@ A disarm acknowledges intrusion and panic alarms. Fire, gas and water alarms sta
 | `XT` / `XR` | Detector battery low / restore | `StatusLowBattery` on the zone |
 | `YT` / `YR` | Battery low / restore | `StatusLowBattery` on the zone when the event has one (the reserve battery of a FireProtect, a keypad...), the hub's `StatusFault` otherwise |
 | `XL` / `XC` | Detector connection lost / restored | `StatusFault` on the zone |
+| `FT` / `FS` / `GS` | Detector failure / smoke chamber dirty or detector faulty / CO sensor faulty | `StatusFault` on the zone, never an alarm. Ignored when there is no zone |
+| `FJ` | Detector failure over, or smoke chamber clean | Clears `FT` and `FS`. A detector stays faulty while another of its failures is still open |
+| `GX` | CO sensor back to normal | Clears `GS` |
+| `XQ` / `XH` | Radio interference is high / back to normal | Hub `StatusFault`. Ignored when a zone is given |
 | `AT` / `AR` | Hub mains power lost / restore | Hub `StatusFault`. Ignored when a zone is given: that is the power of a range extender, a keypad or a power supply |
 | `YM` / `YA` | Hub battery missing / connected again | Hub `StatusFault`. Ignored when a zone is given |
 

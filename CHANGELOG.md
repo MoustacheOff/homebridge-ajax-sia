@@ -4,6 +4,11 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- A detector that reports a failure, a dirty smoke chamber or a faulty CO sensor (`FT`, `FS`, `GS`) shows as faulty in HomeKit until the matching restore (`FJ`, `GX`), without needing the Ajax account. It is a fault, never an alarm.
+- High radio interference reported by the hub (`XQ`) marks the alarm tile as faulty until it is back to normal (`XH`).
+
 ## [1.3.0] - 2026-11-16
 
 ### Added

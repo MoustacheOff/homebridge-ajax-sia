@@ -161,7 +161,7 @@ export class ZoneAccessory {
 
   /** The detector lost contact with the hub (told by the hub itself, or seen by the Ajax account), or reports a malfunction. */
   private fault(): boolean {
-    return this.state.offline || (this.cloud !== undefined && (!this.cloud.online || this.cloud.malfunction));
+    return this.state.offline || this.state.malfunction || (this.cloud !== undefined && (!this.cloud.online || this.cloud.malfunction));
   }
 
   private bindingFor(type: ZoneType): Binding {

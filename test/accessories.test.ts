@@ -141,6 +141,16 @@ describe('ZoneAccessory', () => {
     expect(read(accessory, Service.MotionSensor, Characteristic.StatusFault)).toBe(0);
   });
 
+  it('reports a smoke detector with a dirty chamber as a fault, and not as smoke', () => {
+    const { model, zone } = setup();
+    const { accessory } = zone({ zone: 6, name: 'Kitchen', type: 'smoke' });
+    model.apply({ code: 'FS', zone: 6 });
+    expect(read(accessory, Service.SmokeSensor, Characteristic.StatusFault)).toBe(1);
+    expect(read(accessory, Service.SmokeSensor, Characteristic.SmokeDetected)).toBe(0);
+    model.apply({ code: 'FJ', zone: 6 });
+    expect(read(accessory, Service.SmokeSensor, Characteristic.StatusFault)).toBe(0);
+  });
+
   describe('motion reset', () => {
     const motion = (accessory: PlatformAccessory) => read(accessory, Service.MotionSensor, Characteristic.MotionDetected);
 
