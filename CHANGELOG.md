@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 - A detector that reports a failure, a dirty smoke chamber or a faulty CO sensor (`FT`, `FS`, `GS`) shows as faulty in HomeKit until the matching restore (`FJ`, `GX`), without needing the Ajax account. It is a fault, never an alarm.
 - High radio interference reported by the hub (`XQ`) marks the alarm tile as faulty until it is back to normal (`XH`).
+- Every code of Ajax's SIA table now has a defined effect: a detector shows as tampered for an open enclosure switch, a disconnected antenna, a device that was moved or a sabotaged output line (`EJ`, `EM`, `SM`, `UA`), as faulty for a zone malfunction, a failed self-test, an output fault or masking (`BG`, `UT`, `BS`, `OU`, `BT`), and as inactive (`StatusActive` off) while it is deactivated (`BB`, `QB`, `HB`). The Ajax account's own "deactivated" flag feeds the same field. Each of these stays on until every one of its causes is lifted.
+- Hold-up confirmed (`HV`) and medical or emergency (`MA`) alarms raise the hub's alarm, and clear with `PH` and `MR`. An alarm aborted or cancelled by a disarm (`AB`, `OC`) is acknowledged like `OR`.
+- The hub's links and power show as a fault of the alarm tile while they are down: offline (`YC`), Ethernet, cellular or Wi-Fi (`YS`, `LT`, `YW`), power supply (`YP`).
+- What changes no state but is worth knowing (an arming that failed, a firmware update, a keypad locked) is named in the log, as a warning or as information, instead of only in the debug log.
 
 ## [1.3.0] - 2026-11-16
 

@@ -20,6 +20,7 @@ Anything not listed here is ignored and logged at debug level, with its name whe
 | `OA`, `OB` | Disarmed by a scenario (also one group) | Same |
 | `CS` | Disarmed with an arm switch | Same |
 | `OR` | System restored after alarms | Intrusion and panic alarms acknowledged. Arming is left as it is |
+| `AB`, `OC` | Alarm aborted / cancelled by disarming | Same as `OR` |
 
 The standard SIA codes `CP` (armed) and `OK` (disarmed) are accepted too, although Ajax does not send them.
 
@@ -33,7 +34,7 @@ When every area (`areas` in the config) is armed the state is **Away**; when onl
 | `FA`, `KA` fire, heat | `FR`, `FH`, `KR`, `KH` | fire | smoke sensor, and the hub |
 | `GA` gas | `GR`, `GH` | gas | CO sensor, and the hub |
 | `WA` water | `WR`, `WH` | water | leak sensor only |
-| `PA`, `HA` panic, hold-up | `PR`, `HR` | panic | the hub only |
+| `PA`, `HA` panic, hold-up; `HV` hold-up confirmed; `MA` medical or emergency | `PR`, `HR`, `PH`, `MR` | panic | the hub only |
 
 A disarm acknowledges intrusion and panic alarms. Fire, gas and water alarms stay until the detector reports a restore, except that `FC` (a user reset the fire alarm state) clears every fire alarm: the fire button of a keypad and an evacuation send no restore of their own.
 
@@ -42,17 +43,34 @@ A disarm acknowledges intrusion and panic alarms. Fire, gas and water alarms sta
 | Code | Meaning | Effect |
 | --- | --- | --- |
 | `TA` / `TR` | Tamper or lid open / restore | `StatusTampered` on the zone, or on the hub when there is no zone |
+| `EJ` / `ES` | Enclosure tamper switch disconnected / connected | `StatusTampered` on the zone. Ignored when there is no zone |
+| `EM` / `EN` | External antenna or self-test device disconnected / connected | Same |
+| `SM` / `SC` | Device moved / moved back | Same |
+| `UA` / `UH` | Output line sabotage / restored | Same |
 | `XT` / `XR` | Detector battery low / restore | `StatusLowBattery` on the zone |
 | `YT` / `YR` | Battery low / restore | `StatusLowBattery` on the zone when the event has one (the reserve battery of a FireProtect, a keypad...), the hub's `StatusFault` otherwise |
 | `XL` / `XC` | Detector connection lost / restored | `StatusFault` on the zone |
 | `FT` / `FS` / `GS` | Detector failure / smoke chamber dirty or detector faulty / CO sensor faulty | `StatusFault` on the zone, never an alarm. Ignored when there is no zone |
-| `FJ` | Detector failure over, or smoke chamber clean | Clears `FT` and `FS`. A detector stays faulty while another of its failures is still open |
-| `GX` | CO sensor back to normal | Clears `GS` |
+| `BG` / `UT` / `BS` / `OU` / `BT` | Zone malfunction / malfunction / self-test failed or ring fault / output fault / masking | Same |
+| `FJ`, `GX`, `UJ`, `BJ`, `OV` | Failure over (`FT`, `FS`) / CO sensor back to normal (`GS`) / malfunction over (`UT`) / masking, short circuit or ring fault over (`BG`, `BS`, `BT`) / output fault over (`OU`) | Lifts what it names. A detector stays faulty, or tampered, while another of its causes is still open |
+| `FX`, `BX` | Smoke chamber test / self-test passed | Logged only: a test that went well does not say a failure is over |
+| `BB` / `BU`, `QB` / `QU`, `HB` / `HU` | Detector deactivated / active again (by the user, temporarily, by a setting) | `StatusActive` is off on the zone while any of them is on. Ignored when there is no zone |
 | `XQ` / `XH` | Radio interference is high / back to normal | Hub `StatusFault`. Ignored when a zone is given |
+| `YC` / `YK` | Hub is offline / back online | Hub `StatusFault`. Ignored when a zone is given |
+| `YS` / `YZ`, `LT` / `LR`, `YW` / `YY` | Server link lost / restored over Ethernet, cellular, Wi-Fi | Hub `StatusFault` while any link is down. Ignored when a zone is given |
+| `YP` / `YQ` | Power supply trouble / restored | Hub `StatusFault`. Ignored when a zone is given |
 | `AT` / `AR` | Hub mains power lost / restore | Hub `StatusFault`. Ignored when a zone is given: that is the power of a range extender, a keypad or a power supply |
 | `YM` / `YA` | Hub battery missing / connected again | Hub `StatusFault`. Ignored when a zone is given |
 
 Zone `0`, or no zone, always means the hub itself.
+
+### Logged, no effect on the state
+
+These are named in the log (a warning for the first group, information for the second) and change nothing in HomeKit:
+
+- **Warning:** `CC`, `CD`, `NE`, `CI`, `EA` (an arming failed or did not complete), `JA` (unauthorized access attempt), `XI` (device reset to factory settings), `KT` (overheating shutdown), `YF` (hub memory corrupted), `ZA` (low temperature), `YX` (device not responding).
+- **Information:** `CR`, `KJ`, `ZR`, `AE`, `AY`, `YG`, `RB`, `RS`, `TB`, `TU`, `UR`, `US`, `KG`, `RG`, `RL`, `PF`, `PO`, `ZY`, `ZZ`, `FX`, `BX`.
+- **Debug only:** `RP` (periodic test), the photo codes `PC`, `PD`, `PE`, `PG`, and the calls with a company `AD`, `AC`, `AH`, `AG`, `AI`.
 
 ## Link tests
 

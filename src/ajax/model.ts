@@ -22,8 +22,10 @@ export interface ZoneState {
   lowBattery: boolean;
   /** The detector lost contact with the hub (`XL`), until it reports back (`XC`). */
   offline: boolean;
-  /** The detector reports a failure (`FT`), a dirty smoke chamber (`FS`) or a faulty CO sensor (`GS`), until it clears. */
+  /** The detector reports a failure, a dirty smoke chamber, a faulty sensor or line, or masking, until it clears. */
   malfunction: boolean;
+  /** The detector was deactivated, for good or for now (bypassed). */
+  deactivated: boolean;
 }
 
 /** What a persisted snapshot of the arming state looks like. */
@@ -41,6 +43,8 @@ interface ModelEvents {
   alarm: [number, AlarmKind];
   /** Fired for every event the model has no use for, so it can be logged for troubleshooting. */
   ignored: [SiaEvent];
+  /** Fired for an event that changes no state but is worth a line in the log (an arming that failed, a firmware update). */
+  notice: [SiaEvent, 'info' | 'warn'];
 }
 
 /** Zone reserved for the hub itself: tamper, battery and mains events carry no zone, or zone 0. */
@@ -63,14 +67,14 @@ const ALARMS: Record<string, AlarmKind> = {
   FA: 'fire', KA: 'fire',
   WA: 'water',
   GA: 'gas',
-  PA: 'panic', HA: 'panic',
+  PA: 'panic', HA: 'panic', HV: 'panic', MA: 'panic',
 };
 const RESTORES: Record<string, AlarmKind> = {
   BR: 'intrusion', BH: 'intrusion',
   FR: 'fire', FH: 'fire', KR: 'fire', KH: 'fire',
   WR: 'water', WH: 'water',
   GR: 'gas', GH: 'gas',
-  PR: 'panic', HR: 'panic',
+  PR: 'panic', HR: 'panic', PH: 'panic', MR: 'panic',
 };
 
 /** Alarms that a disarm acknowledges. Fire, water and gas stay until the detector reports a restore. */
@@ -80,22 +84,65 @@ const CLEARED_BY_DISARM = new Set<AlarmKind>(['intrusion', 'panic']);
 const HUB_ALARMS = new Set<AlarmKind>(['intrusion', 'fire', 'gas', 'panic']);
 
 /**
- * Detector failures. They raise a fault on the zone, never an alarm. `FJ` (failure over, or smoke chamber clean)
- * clears both `FT` and `FS`; `GX` clears `GS`. `FX` (smoke chamber test passed) says nothing about a fault, so it clears none.
+ * Conditions a detector reports and later lifts, each with its own source so that one restore never hides another
+ * failure still open. `on` maps a code to the source it opens, `off` maps a restore code to the sources it closes.
+ *
+ * - tamper: lid (`TA`), enclosure switch (`EJ`), external antenna or self-test device (`EM`), device moved (`SM`),
+ *   output line sabotage (`UA`).
+ * - malfunction: detector failure (`FT`), dirty smoke chamber (`FS`), faulty CO sensor (`GS`), zone malfunction (`BG`),
+ *   malfunction (`UT`), failed self-test or ring fault (`BS`), output fault (`OU`), masking (`BT`). `BJ` (masking, short
+ *   circuit or ring fault over) is the restore of the whole `B` family. `FX` and `BX` (a test passed) lift nothing:
+ *   they say a test went well, not that a failure is over.
+ * - deactivated: the detector was bypassed, by the user (`BB`), temporarily (`QB`) or by a setting (`HB`).
+ *
+ * None of these is an alarm.
  */
-const MALFUNCTIONS: Record<string, string> = { FT: 'FT', FS: 'FS', GS: 'GS' };
-const MALFUNCTION_CLEARS = new Map<string, string[]>([['FJ', ['FT', 'FS']], ['GX', ['GS']]]);
+interface Flag {
+  on: Record<string, string>;
+  off: Record<string, string[]>;
+}
+const FLAGS = {
+  tampered: {
+    on: { TA: 'TA', EJ: 'EJ', EM: 'EM', SM: 'SM', UA: 'UA' },
+    off: { TR: ['TA'], ES: ['EJ'], EN: ['EM'], SC: ['SM'], UH: ['UA'] },
+  },
+  malfunction: {
+    on: { FT: 'FT', FS: 'FS', GS: 'GS', BG: 'BG', UT: 'UT', BS: 'BS', OU: 'OU', BT: 'BT' },
+    off: { FJ: ['FT', 'FS'], GX: ['GS'], UJ: ['UT'], BJ: ['BG', 'BS', 'BT'], OV: ['OU'] },
+  },
+  deactivated: {
+    on: { BB: 'BB', QB: 'QB', HB: 'HB' },
+    off: { BU: ['BB'], QU: ['QB'], HU: ['HB'] },
+  },
+} satisfies Record<string, Flag>;
+type FlagName = keyof typeof FLAGS;
+
+/** Hub troubles: the code that opens one, and the code that closes it. Ignored when a device (with a zone) reports it. */
+const HUB_TROUBLES = {
+  on: { YP: 'power', YC: 'offline', YS: 'ethernet', LT: 'cellular', YW: 'wifi' },
+  off: { YQ: 'power', YK: 'offline', YZ: 'ethernet', LR: 'cellular', YY: 'wifi' },
+} as const;
+
+/** Events that change nothing but deserve a line in the log. */
+const WARNINGS = new Set([
+  'CC', 'CD', 'NE', 'CI', 'EA', // arming that failed or did not complete
+  'JA', 'XI', 'KT', 'YF', 'ZA', 'YX',
+]);
+const NOTICES = new Set([
+  'CR', 'KJ', 'ZR', 'AE', 'AY', 'YG', 'RB', 'RS', 'TB', 'TU', 'UR', 'US', 'KG', 'RG', 'RL', 'PF', 'PO', 'ZY', 'ZZ', 'FX', 'BX',
+]);
 
 const ZONE_CODES = new Set([
-  ...Object.keys(ALARMS), ...Object.keys(RESTORES), 'TA', 'TR', 'XT', 'XR', 'XL', 'XC',
-  ...Object.keys(MALFUNCTIONS), ...MALFUNCTION_CLEARS.keys(),
+  ...Object.keys(ALARMS), ...Object.keys(RESTORES), 'XT', 'XR', 'XL', 'XC',
+  ...Object.values(FLAGS).flatMap((flag) => [...Object.keys(flag.on), ...Object.keys(flag.off)]),
 ]);
 
 /** Whether the number that follows this code is a zone (as opposed to a user, for instance). */
 export const isZoneCode = (code: string): boolean => ZONE_CODES.has(code);
 
 const emptyZone = (): ZoneState => ({
-  intrusion: false, fire: false, water: false, gas: false, tampered: false, lowBattery: false, offline: false, malfunction: false,
+  intrusion: false, fire: false, water: false, gas: false, tampered: false, lowBattery: false, offline: false,
+  malfunction: false, deactivated: false,
 });
 
 /**
@@ -110,7 +157,9 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
   private offline = false;
   private hubTampered = false;
   private readonly hubFaults = new Set<string>();
-  private readonly malfunctions = new Map<number, Set<string>>();
+  private readonly flags: Record<FlagName, Map<number, Set<string>>> = {
+    tampered: new Map(), malfunction: new Map(), deactivated: new Map(),
+  };
   private readonly alarms = new Map<string, AlarmKind>();
   private readonly zones = new Map<number, ZoneState>();
   private last?: HubState;
@@ -189,7 +238,7 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
     } else if (NIGHT_OFF_CODES.has(code)) {
       this.night = false;
       this.publishHub();
-    } else if (code === 'OR') {
+    } else if (code === 'OR' || code === 'AB' || code === 'OC') {
       this.acknowledgeAlarms();
     } else if (code === 'FC') {
       this.clearFire();
@@ -197,22 +246,28 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
       this.raise(ALARMS[code]!, event);
     } else if (code in RESTORES) {
       this.restoreAlarm(RESTORES[code]!, event);
-    } else if (code === 'TA' || code === 'TR') {
-      this.setTamper(event.zone, code === 'TA');
+    } else if (this.applyFlag(event)) {
+      // A condition of a detector (or of the hub itself, for a tamper): see FLAGS.
     } else if (code === 'XT' || code === 'XR' || code === 'YT' || code === 'YR') {
       // `YT`/`YR` are the hub's own battery without a zone, and a device's reserve battery with one.
       this.setBattery(event.zone, code === 'XT' || code === 'YT');
     } else if (code === 'XL' || code === 'XC') {
       this.setOfflineZone(event.zone, code === 'XL');
-    } else if (code in MALFUNCTIONS || MALFUNCTION_CLEARS.has(code)) {
-      this.setMalfunction(event);
     } else if (code === 'XQ' || code === 'XH') {
       // Radio interference: only the hub's own report counts.
       this.setHubOnly('interference', event, code === 'XQ');
+    } else if (code in HUB_TROUBLES.on) {
+      this.setHubOnly(HUB_TROUBLES.on[code as keyof typeof HUB_TROUBLES.on], event, true);
+    } else if (code in HUB_TROUBLES.off) {
+      this.setHubOnly(HUB_TROUBLES.off[code as keyof typeof HUB_TROUBLES.off], event, false);
     } else if (code === 'AT' || code === 'AR') {
       this.setHubOnly('mains', event, code === 'AT');
     } else if (code === 'YM' || code === 'YA') {
       this.setHubOnly('batteryMissing', event, code === 'YM');
+    } else if (WARNINGS.has(code)) {
+      this.emit('notice', event, 'warn');
+    } else if (NOTICES.has(code)) {
+      this.emit('notice', event, 'info');
     } else {
       this.emit('ignored', event);
     }
@@ -275,13 +330,36 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
     this.publishHub();
   }
 
-  private setTamper(zone: number | undefined, tampered: boolean): void {
-    if (zone === undefined || zone === HUB_ZONE) {
-      this.hubTampered = tampered;
-      this.publishHub();
-    } else {
-      this.updateZone(zone, { tampered });
+  /** Handles the codes of FLAGS. Returns whether the code was one of them. */
+  private applyFlag(event: SiaEvent): boolean {
+    const { code, zone } = event;
+    for (const name of Object.keys(FLAGS) as FlagName[]) {
+      const flag: Flag = FLAGS[name];
+      const opens = flag.on[code];
+      const closes = flag.off[code];
+      if (opens === undefined && closes === undefined) {
+        continue;
+      }
+      if (zone === undefined || zone === HUB_ZONE) {
+        if (name === 'tampered' && (code === 'TA' || code === 'TR')) {
+          this.hubTampered = code === 'TA';
+          this.publishHub();
+        } else {
+          this.emit('ignored', event);
+        }
+      } else {
+        this.setFlag(name, zone, opens !== undefined ? [opens] : closes!, opens !== undefined);
+      }
+      return true;
     }
+    return false;
+  }
+
+  private setFlag(name: FlagName, zone: number, sources: string[], active: boolean): void {
+    const open = this.flags[name].get(zone) ?? new Set<string>();
+    sources.forEach((source) => (active ? open.add(source) : open.delete(source)));
+    this.flags[name].set(zone, open);
+    this.updateZone(zone, { [name]: open.size > 0 });
   }
 
   private setBattery(zone: number | undefined, low: boolean): void {
@@ -296,23 +374,6 @@ export class AjaxModel extends EventEmitter<ModelEvents> {
     if (zone !== undefined && zone !== HUB_ZONE) {
       this.updateZone(zone, { offline });
     }
-  }
-
-  private setMalfunction(event: SiaEvent): void {
-    const { code, zone } = event;
-    if (zone === undefined || zone === HUB_ZONE) {
-      this.emit('ignored', event);
-      return;
-    }
-    const active = this.malfunctions.get(zone) ?? new Set<string>();
-    const cleared = MALFUNCTION_CLEARS.get(code);
-    if (cleared) {
-      cleared.forEach((name) => active.delete(name));
-    } else {
-      active.add(MALFUNCTIONS[code]!);
-    }
-    this.malfunctions.set(zone, active);
-    this.updateZone(zone, { malfunction: active.size > 0 });
   }
 
   /**

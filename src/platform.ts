@@ -495,6 +495,11 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       const alarm = hub.alarm ? ' ALARM' : '';
       this.log.info(`Hub: ${hub.arm}${alarm}${hub.tampered ? ', tampered' : ''}${hub.fault ? ', fault' : ''}`);
     });
+    model.on('notice', (event, level) => {
+      const name = describeCode(event.code);
+      const where = event.zone !== undefined ? `, zone ${event.zone}` : '';
+      this.log[level](`Hub reported ${event.code}${name ? ` (${name})` : ''}${where}`);
+    });
     model.on('ignored', (event) => {
       const name = describeCode(event.code);
       this.log.debug(`Ignored event ${event.code}${name ? ` (${name})` : ''}${event.zone !== undefined ? `, zone ${event.zone}` : ''}`);

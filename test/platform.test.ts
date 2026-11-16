@@ -156,22 +156,32 @@ describe('AjaxSiaPlatform', () => {
 
   it('applies a message once when the hub sends it again', async () => {
     const { port, messages } = await launch();
-    const sent = hubMessage({ sequence: '0007', data: 'Nri1/BB1' });
+    const sent = hubMessage({ sequence: '0007', data: 'Nri1/AD1' });
     await hubSends(port, sent);
     await hubSends(port, sent);
-    await hubSends(port, hubMessage({ sequence: '0008', data: 'Nri1/BB1' }));
+    await hubSends(port, hubMessage({ sequence: '0008', data: 'Nri1/AD1' }));
 
-    const handled = messages.debug.filter((line) => line.startsWith('Ignored event BB'));
+    const handled = messages.debug.filter((line) => line.startsWith('Ignored event AD'));
     expect(handled).toHaveLength(2);
     expect(messages.debug.filter((line) => line.startsWith('Repeat of message 0007'))).toHaveLength(1);
   });
 
   it('names an ignored event in the log', async () => {
     const { port, messages } = await launch();
-    await hubSends(port, hubMessage({ data: 'Nri1/BB2' }));
-    expect(messages.debug).toContain('Ignored event BB (Device deactivated), zone 2');
+    await hubSends(port, hubMessage({ data: 'Nri1/AD2' }));
+    expect(messages.debug).toContain('Ignored event AD (Call from a company started), zone 2');
     await hubSends(port, hubMessage({ sequence: '0002', data: 'Nri1/ZQ9' }));
     expect(messages.debug).toContain('Ignored event ZQ, zone 9');
+  });
+});
+
+describe('AjaxSiaPlatform notices', () => {
+  it('logs an arming that failed as a warning, and a firmware update as information', async () => {
+    const { port, messages } = await launch();
+    await hubSends(port, hubMessage({ data: 'Nri1/CC' }));
+    await hubSends(port, hubMessage({ sequence: '0002', data: 'Nri1/RS' }));
+    expect(messages.warn).toContain('Hub reported CC (Arming by a scenario failed)');
+    expect(messages.info).toContain('Hub reported RS (Firmware updated)');
   });
 });
 

@@ -151,6 +151,16 @@ describe('ZoneAccessory', () => {
     expect(read(accessory, Service.SmokeSensor, Characteristic.StatusFault)).toBe(0);
   });
 
+  it('shows a deactivated detector as inactive, from the hub or from the Ajax account', () => {
+    const { model, zone } = setup();
+    const { accessory } = zone({ zone: 5, name: 'Hall', type: 'motion' });
+    expect(read(accessory, Service.MotionSensor, Characteristic.StatusActive)).toBe(1);
+    model.apply({ code: 'BB', zone: 5 });
+    expect(read(accessory, Service.MotionSensor, Characteristic.StatusActive)).toBe(0);
+    model.apply({ code: 'BU', zone: 5 });
+    expect(read(accessory, Service.MotionSensor, Characteristic.StatusActive)).toBe(1);
+  });
+
   describe('motion reset', () => {
     const motion = (accessory: PlatformAccessory) => read(accessory, Service.MotionSensor, Characteristic.MotionDetected);
 
@@ -282,6 +292,15 @@ describe('ZoneAccessory with what the Ajax account says', () => {
     zone.applyCloud(info({ batteryPercent: 80, batteryLow: false }));
     model.apply({ code: 'XT', zone: 3 });
     expect(read(Service.MotionSensor, Characteristic.StatusLowBattery)).toBe(1);
+  });
+
+  it('shows a detector that the account says is deactivated as inactive', () => {
+    const { zone, read } = sensor();
+    expect(read(Service.MotionSensor, Characteristic.StatusActive)).toBe(true);
+    zone.applyCloud(info({ bypassed: true }));
+    expect(read(Service.MotionSensor, Characteristic.StatusActive)).toBe(false);
+    zone.applyCloud(info({ bypassed: false }));
+    expect(read(Service.MotionSensor, Characteristic.StatusActive)).toBe(true);
   });
 
   it('shows a detector that the account sees opened as tampered', () => {

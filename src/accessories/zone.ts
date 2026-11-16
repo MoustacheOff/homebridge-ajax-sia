@@ -76,6 +76,7 @@ export class ZoneAccessory {
     this.service.getCharacteristic(Characteristic.StatusTampered).onGet(() => (this.tampered() ? 1 : 0));
     this.service.getCharacteristic(Characteristic.StatusLowBattery).onGet(() => (this.lowBattery() ? 1 : 0));
     this.service.getCharacteristic(Characteristic.StatusFault).onGet(() => (this.fault() ? 1 : 0));
+    this.service.getCharacteristic(Characteristic.StatusActive).onGet(() => this.active());
 
     this.render();
     model.on('zone', (zone, state) => {
@@ -159,6 +160,11 @@ export class ZoneAccessory {
     return this.state.lowBattery || this.cloud?.batteryLow === true;
   }
 
+  /** The detector is not deactivated (bypassed), as told by the hub or seen by the Ajax account. */
+  private active(): boolean {
+    return !this.state.deactivated && !this.cloud?.bypassed;
+  }
+
   /** The detector lost contact with the hub (told by the hub itself, or seen by the Ajax account), or reports a malfunction. */
   private fault(): boolean {
     return this.state.offline || this.state.malfunction || (this.cloud !== undefined && (!this.cloud.online || this.cloud.malfunction));
@@ -220,5 +226,6 @@ export class ZoneAccessory {
     this.service.updateCharacteristic(Characteristic.StatusTampered, this.tampered() ? 1 : 0);
     this.service.updateCharacteristic(Characteristic.StatusLowBattery, this.lowBattery() ? 1 : 0);
     this.service.updateCharacteristic(Characteristic.StatusFault, this.fault() ? 1 : 0);
+    this.service.updateCharacteristic(Characteristic.StatusActive, this.active());
   }
 }

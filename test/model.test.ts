@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { AjaxModel, isZoneCode, type HubState, type ZoneState } from '../src/ajax/model.js';
 import type { SiaEvent } from '../src/sia/event.js';
+import { AJAX_CODES } from './ajaxCodes.js';
 
 const ev = (code: string, zone?: number, area?: number): SiaEvent => ({
   code,
@@ -323,6 +324,130 @@ describe('AjaxModel', () => {
       expect(ignored.map((event) => event.code)).toEqual(['XQ']);
     });
 
+    it('keeps a detector tampered until every source of tamper is back', () => {
+      model.apply(ev('TA', 4));
+      model.apply(ev('EJ', 4));
+      model.apply(ev('TR', 4));
+      expect(model.zone(4).tampered).toBe(true);
+      model.apply(ev('ES', 4));
+      expect(model.zone(4).tampered).toBe(false);
+    });
+
+    it.each([
+      ['EJ', 'ES'], ['EM', 'EN'], ['SM', 'SC'], ['UA', 'UH'],
+    ])('reads %s as a tamper of the detector, lifted by %s', (opens, closes) => {
+      model.apply(ev(opens, 4));
+      expect(model.zone(4).tampered).toBe(true);
+      expect(model.hub.tampered).toBe(false);
+      model.apply(ev(closes, 4));
+      expect(model.zone(4).tampered).toBe(false);
+    });
+
+    it('does not read the tamper of a device without a zone as the hub\'s, except the lid codes', () => {
+      model.apply(ev('EJ'));
+      expect(model.hub.tampered).toBe(false);
+      model.apply(ev('TA'));
+      expect(model.hub.tampered).toBe(true);
+      model.apply(ev('TR'));
+      expect(model.hub.tampered).toBe(false);
+    });
+
+    it.each([
+      ['BG', 'BJ'], ['UT', 'UJ'], ['BS', 'BJ'], ['OU', 'OV'], ['BT', 'BJ'],
+    ])('reads %s as a malfunction of the detector, lifted by %s', (opens, closes) => {
+      model.apply(ev(opens, 8));
+      expect(model.zone(8).malfunction).toBe(true);
+      expect(model.hub.alarm).toBe(false);
+      model.apply(ev(closes, 8));
+      expect(model.zone(8).malfunction).toBe(false);
+    });
+
+    it('does not read a passed self-test as the end of a failure', () => {
+      model.apply(ev('BS', 8));
+      model.apply(ev('BX', 8));
+      expect(model.zone(8).malfunction).toBe(true);
+    });
+
+    it.each([
+      ['BB', 'BU'], ['QB', 'QU'], ['HB', 'HU'],
+    ])('tracks a detector deactivated with %s until %s', (off, back) => {
+      model.apply(ev(off, 2));
+      expect(model.zone(2).deactivated).toBe(true);
+      model.apply(ev(back, 2));
+      expect(model.zone(2).deactivated).toBe(false);
+    });
+
+    it('keeps a detector deactivated while another way of deactivating it is on', () => {
+      model.apply(ev('BB', 2));
+      model.apply(ev('QB', 2));
+      model.apply(ev('BU', 2));
+      expect(model.zone(2).deactivated).toBe(true);
+      model.apply(ev('QU', 2));
+      expect(model.zone(2).deactivated).toBe(false);
+    });
+
+    it('ignores a deactivation that comes with no zone', () => {
+      const ignored: SiaEvent[] = [];
+      model.on('ignored', (event) => ignored.push(event));
+      model.apply(ev('BB'));
+      expect(ignored.map((event) => event.code)).toEqual(['BB']);
+    });
+
+    it('raises a hold-up, medical or panic alarm on the hub and clears it with its restore', () => {
+      model.apply(ev('MA', 5));
+      expect(model.hub.alarm).toBe(true);
+      model.apply(ev('MR', 5));
+      expect(model.hub.alarm).toBe(false);
+      model.apply(ev('HV', 5));
+      expect(model.hub.alarm).toBe(true);
+      model.apply(ev('PH', 5));
+      expect(model.hub.alarm).toBe(false);
+    });
+
+    it('treats an alarm aborted or cancelled by a disarm as acknowledged', () => {
+      model.apply(ev('BA', 3));
+      expect(model.hub.alarm).toBe(true);
+      model.apply(ev('AB', 3));
+      expect(model.hub.alarm).toBe(false);
+      model.apply(ev('BA', 3));
+      model.apply(ev('OC', 3));
+      expect(model.hub.alarm).toBe(false);
+    });
+
+    it.each([
+      ['YC', 'YK'], ['YS', 'YZ'], ['LT', 'LR'], ['YW', 'YY'], ['YP', 'YQ'],
+    ])('reads %s as a trouble of the hub, lifted by %s', (opens, closes) => {
+      model.apply(ev(opens));
+      expect(model.hub.fault).toBe(true);
+      model.apply(ev(closes));
+      expect(model.hub.fault).toBe(false);
+    });
+
+    it('keeps the hub faulty while one of its links is still down', () => {
+      model.apply(ev('YS'));
+      model.apply(ev('LT'));
+      model.apply(ev('YZ'));
+      expect(model.hub.fault).toBe(true);
+      model.apply(ev('LR'));
+      expect(model.hub.fault).toBe(false);
+    });
+
+    it('ignores a hub trouble that a device reports with its own zone', () => {
+      const ignored: SiaEvent[] = [];
+      model.on('ignored', (event) => ignored.push(event));
+      model.apply(ev('YP', 7));
+      expect(model.hub.fault).toBe(false);
+      expect(ignored.map((event) => event.code)).toEqual(['YP']);
+    });
+
+    it('announces what changes no state but deserves the log, as a warning or as information', () => {
+      const notices: string[] = [];
+      model.on('notice', (event, level) => notices.push(`${event.code}:${level}`));
+      model.apply(ev('CC'));
+      model.apply(ev('RS'));
+      expect(notices).toEqual(['CC:warn', 'RS:info']);
+    });
+
     it('reports a silent hub as a fault', () => {
       model.setOffline(true);
       expect(model.hub.fault).toBe(true);
@@ -388,5 +513,28 @@ describe('AjaxModel.reconcile', () => {
     model.reconcile('away');
     expect(model.hub.alarm).toBe(true);
     expect(seen.at(-1)).toBe('away');
+  });
+});
+
+describe('the codes of the Ajax table', () => {
+  /** Codes that are acknowledged on purpose and have no effect: a periodic test, photos, calls to or from a company. */
+  const NO_EFFECT = new Set(['RP', 'PC', 'PD', 'PE', 'PG', 'AD', 'AC', 'AH', 'AG', 'AI']);
+
+  const isIgnored = (code: string, zone?: number): boolean => {
+    const model = new AjaxModel(1);
+    let ignored = false;
+    model.on('ignored', () => {
+      ignored = true;
+    });
+    model.apply(ev(code, zone, 1));
+    return ignored;
+  };
+
+  it.each(AJAX_CODES.filter((code) => !NO_EFFECT.has(code)))('does something with %s, at the hub or on a zone', (code) => {
+    expect(isIgnored(code) && isIgnored(code, 3)).toBe(false);
+  });
+
+  it.each([...NO_EFFECT])('leaves %s without effect, and says so in the debug log', (code) => {
+    expect(isIgnored(code, 3)).toBe(true);
   });
 });
