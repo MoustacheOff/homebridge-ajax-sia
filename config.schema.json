@@ -158,7 +158,7 @@
               "title": "Firmware",
               "type": "string",
               "maxLength": 64,
-              "description": "As shown in the Ajax app. Leave empty to show the version of this plugin."
+              "description": "As shown in the Ajax app. Leave empty to read it from the Ajax account when the cloud features are on, or to show the version of this plugin."
             }
           }
         }
@@ -281,6 +281,15 @@
               "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
             }
           },
+          "hubFirmware": {
+            "title": "Show the hub firmware",
+            "type": "boolean",
+            "default": true,
+            "description": "Read the firmware the hub runs from the Ajax account, once a day, and show it in HomeKit. Only applies once the account is set, and when no firmware is typed under Hub information.",
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          },
           "liveUpdates": {
             "title": "Follow the detectors live",
             "type": "boolean",
@@ -397,6 +406,7 @@
         "cloud.discoverDevices",
         "cloud.temperatureSensors",
         "cloud.liveUpdates",
+        "cloud.hubFirmware",
         "cloud.clientVersion",
         "cloud.deviceModel",
         "cloud.deviceOs"

@@ -39,6 +39,10 @@ export interface CloudConfig {
   temperatureSensors: boolean;
   /** Keep a connection open to the Ajax account, as the Ajax app does, to learn of changes as they happen. */
   liveUpdates: boolean;
+  /** Show the firmware the hub runs, read from the Ajax account, unless the user typed one. */
+  hubFirmware: boolean;
+  /** Replaces the host of the hub connection; only meant for tests. */
+  htsHost?: string;
 }
 
 export interface Config {
@@ -294,5 +298,7 @@ function parseCloud(value: unknown, errors: string[]): CloudConfig | undefined {
     discoverDevices: flag('discoverDevices'),
     temperatureSensors: flag('temperatureSensors'),
     liveUpdates: flag('liveUpdates'),
+    hubFirmware: flag('hubFirmware'),
+    ...(text('htsHost') ? { htsHost: text('htsHost') as string } : {}),
   };
 }

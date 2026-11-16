@@ -45,6 +45,11 @@ export class CloudController {
     return STATES[space.state];
   }
 
+  /** The id of the hub of the space, as the Ajax account gives it. */
+  async hubId(): Promise<string> {
+    return (await this.space()).hubId;
+  }
+
   /** Lists the devices of the space with their state. */
   async devices(): Promise<CloudDevice[]> {
     const id = this.spaceId ?? (await this.space()).id;

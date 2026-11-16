@@ -13,6 +13,7 @@ import {
   UPDATE, battery, flag, hubDevice, malfunctionsUpdate, snapshot, statusUpdate, temperature, updatesMessage,
 } from './cloud/deviceFixtures.js';
 import { FakeGrpcServer, type Call, type Reply } from './cloud/fakeGrpc.js';
+import { FakeHts } from './cloud/fakeHts.js';
 import { GrpcStatus } from '../src/cloud/grpc.js';
 import { createApi, createLog, freePort } from './fakeHomebridge.js';
 import { ACCOUNT, hubMessage } from './helpers.js';
@@ -74,7 +75,10 @@ async function launch(
     listenAddress: '127.0.0.1',
     protocol: 'tcp',
     maxTimeSkewSeconds: 0,
-    cloud: { email: 'me@example.com', password: 'hunter2', host: origin, syncIntervalMinutes: 0, liveUpdates: false, ...settings },
+    cloud: {
+      email: 'me@example.com', password: 'hunter2', host: origin, syncIntervalMinutes: 0,
+      liveUpdates: false, hubFirmware: false, ...settings,
+    },
     ...platformSettings,
   } as PlatformConfig;
 
@@ -404,6 +408,66 @@ describe('AjaxSiaPlatform following the devices live', () => {
     await vi.waitFor(() => expect(messages.info.some((line) => line.includes('Read 1 devices'))).toBe(true));
     expect(messages.info.some((line) => line.includes('live'))).toBe(false);
   });
+});
+
+describe('AjaxSiaPlatform showing the firmware of the hub', () => {
+  const hts = new FakeHts();
+  const hubId = '0A1B2C3D';
+  const firmware = (hub: { getService: (service: never) => { getCharacteristic: (c: never) => { value: unknown } } | undefined }) =>
+    hub.getService(Service.AccessoryInformation as never)?.getCharacteristic(Characteristic.FirmwareRevision as never).value;
+
+  beforeEach(() => {
+    handlers['FindUserSpacesWithPaginationService/execute'] = () => ({
+      message: new Writer()
+        .message(1, new Writer().message(1, new Writer().string(1, 'space-1').message(2, new Writer().string(1, 'Home')).varint(3, 2)
+          .string(999, hubId.toLowerCase())))
+        .finish(),
+    });
+  });
+
+  afterEach(async () => {
+    await hts.stop();
+  });
+
+  const hubOf = (registered: { getService: (service: never) => unknown }[]) =>
+    registered.find((accessory) => accessory.getService(Service.SecuritySystem as never))! as never;
+
+  it('shows what the hub runs, read from the Ajax account', async () => {
+    const port = await hts.start();
+    const { registered, messages } = await launch({ hubFirmware: true, htsHost: `tcp://127.0.0.1:${port}` });
+    await vi.waitFor(() => expect(messages.info.some((line) => line.includes('The hub runs firmware 2.43.121'))).toBe(true));
+    expect(firmware(hubOf(registered))).toBe('2.43.121');
+    // It introduced itself the way the app does, with the session of the login.
+    const hello = hts.seen[0]!;
+    expect(hello.sender).toBe(0xdeadbeef);
+  });
+
+  it('keeps showing the version of the plugin, and keeps talking to Ajax, when the hub server cannot be read', async () => {
+    const port = await hts.start({ hangUp: true });
+    const { registered, messages, current } = await launch({ hubFirmware: true, htsHost: `tcp://127.0.0.1:${port}` });
+    await vi.waitFor(() => expect(messages.warn.some((line) => line.includes('Could not read the hub firmware'))).toBe(true));
+    expect(firmware(hubOf(registered))).not.toBe('2.43.121');
+    expect(messages.error).toEqual([]);
+    expect(current()).toBeDefined();
+  });
+
+  it('keeps the firmware the user typed', async () => {
+    const port = await hts.start();
+    const { registered } = await launch(
+      { hubFirmware: true, htsHost: `tcp://127.0.0.1:${port}` }, undefined, { hub: { firmware: '9.9.9' } },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(firmware(hubOf(registered))).toBe('9.9.9');
+    expect(hts.seen).toEqual([]);
+  });
+
+  it('does not connect to the hub server when the user turned it off', async () => {
+    const port = await hts.start();
+    await launch({ hubFirmware: false, htsHost: `tcp://127.0.0.1:${port}` });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(hts.seen).toEqual([]);
+  });
+
 });
 
 describe('AjaxSiaPlatform renaming itself in the Ajax account', () => {

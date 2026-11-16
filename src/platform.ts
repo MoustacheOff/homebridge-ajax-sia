@@ -8,6 +8,7 @@ import { CloudController } from './cloud/controller.js';
 import { LiveDevices } from './cloud/live.js';
 import { sensorKind } from './cloud/deviceTypes.js';
 import { GrpcChannel } from './cloud/grpc.js';
+import { readHubFirmware } from './cloud/hts.js';
 import { CloudStore } from './cloud/store.js';
 import { parseConfig, type Config } from './config.js';
 import { describeCode } from './sia/codes.js';
@@ -32,6 +33,9 @@ interface CloudLink {
   /** Stops following them. */
   end: () => void;
 }
+
+/** The firmware of a hub changes rarely; asking once a day is plenty. */
+const FIRMWARE_REFRESH_MS = 24 * 60 * 60_000;
 
 /** After a command, check what the hub actually did, in case the SIA event is late or not configured. */
 const VERIFY_DELAY_MS = 6_000;
@@ -284,10 +288,61 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
       clearTimeout(this.verify);
       this.verify = setTimeout(() => void sync(), VERIFY_DELAY_MS);
     };
+    // The firmware of the hub comes from another connection of the Ajax app. It changes rarely: read it once, then daily.
+    let firmwareWarned = false;
+    let firmwareTimer: NodeJS.Timeout | undefined;
+    const readFirmware = async (): Promise<void> => {
+      if (stopped || !settings.hubFirmware || config.hub.firmware) {
+        return;
+      }
+      try {
+        const session = await attempt(async () => {
+          await client.ensureSession();
+          store.save(client.current, identity);
+          return client.current!;
+        });
+        const hubId = await attempt(() => controller.hubId());
+        const versions = await readHubFirmware({
+          token: session.token,
+          userId: session.userId,
+          deviceId: store.deviceId,
+          clientVersion: settings.clientVersion,
+          deviceModel: settings.deviceModel,
+          deviceOs: settings.deviceOs,
+          ...(settings.htsHost ? { host: settings.htsHost } : {}),
+        });
+        const version = versions.get(hubId.toUpperCase()) ?? (versions.size === 1 ? [...versions.values()][0] : undefined);
+        if (version) {
+          this.hub?.setFirmware(version);
+          this.log.info(`The hub runs firmware ${version}`);
+        } else if (!firmwareWarned) {
+          firmwareWarned = true;
+          this.log.warn('Ajax did not tell which firmware the hub runs; HomeKit shows the version of this plugin instead');
+        }
+      } catch (error) {
+        if (!firmwareWarned && !stopped) {
+          firmwareWarned = true;
+          this.log.warn(`Could not read the hub firmware from Ajax (${describe(error)}); HomeKit shows the version of this plugin instead`);
+        }
+      }
+    };
+
     return {
       commander,
-      begin: () => (live ? live.start() : void readDevices()),
-      end: () => live?.stop(),
+      begin: () => {
+        if (live) {
+          live.start();
+        } else {
+          void readDevices();
+        }
+        void readFirmware();
+        firmwareTimer = setInterval(() => void readFirmware(), FIRMWARE_REFRESH_MS);
+        firmwareTimer.unref();
+      },
+      end: () => {
+        live?.stop();
+        clearInterval(firmwareTimer);
+      },
     };
   }
 

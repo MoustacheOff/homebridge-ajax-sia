@@ -6,6 +6,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- Once the Ajax account is set up, the firmware the hub runs is read from it (`cloud.hubFirmware`, on by default, once a day) and shown in HomeKit, unless one is typed under `hub.firmware`. It comes from a second connection of the Ajax app, which this plugin opens only for that and closes right after. If it cannot be read, HomeKit keeps showing the version of the plugin.
 - Once the Ajax account is set up, its detectors are followed live (`cloud.liveUpdates`, on by default among the cloud options; without an account the plugin still never contacts Ajax): the plugin keeps a connection open, as the Ajax app does, so a battery, a tamper or a detector that goes offline shows as it changes. The connection is opened again after a loss, waiting longer after each failure, and the periodic read stays as the safety net while it is down. Set `liveUpdates` to `false` to read the account only every `syncIntervalMinutes`.
 
 ### Changed

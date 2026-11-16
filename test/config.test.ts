@@ -124,10 +124,11 @@ describe('parseConfig cloud', () => {
       discoverDevices: true,
       temperatureSensors: true,
       liveUpdates: true,
+      hubFirmware: true,
     });
   });
 
-  it.each(['discoverDevices', 'temperatureSensors', 'liveUpdates'])('lets the user turn %s off', (field) => {
+  it.each(['discoverDevices', 'temperatureSensors', 'liveUpdates', 'hubFirmware'])('lets the user turn %s off', (field) => {
     expect(parseConfig({ ...valid, cloud: { ...cloud, [field]: false } }).config?.cloud).toMatchObject({ [field]: false });
   });
 

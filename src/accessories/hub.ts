@@ -24,6 +24,7 @@ export class HubAccessory {
   private hub: HubState;
   private pending?: ArmState;
   private pendingTimer?: NodeJS.Timeout;
+  private readonly information: Service;
 
   /**
    * @param commander when given, arming and disarming from HomeKit is enabled; otherwise the tile is read-only.
@@ -38,7 +39,8 @@ export class HubAccessory {
   ) {
     const { Service, Characteristic, Perms } = api.hap;
 
-    accessory.getService(Service.AccessoryInformation)!
+    this.information = accessory.getService(Service.AccessoryInformation)!;
+    this.information
       .setCharacteristic(Characteristic.Manufacturer, 'Ajax Systems')
       .setCharacteristic(Characteristic.Model, info.model ?? 'Hub')
       .setCharacteristic(Characteristic.SerialNumber, info.serial ?? 'Ajax hub')
@@ -77,6 +79,11 @@ export class HubAccessory {
       accessory.context.arm = model.snapshot();
       this.render();
     });
+  }
+
+  /** The firmware the hub runs, once it is known. */
+  setFirmware(version: string): void {
+    this.information.updateCharacteristic(this.api.hap.Characteristic.FirmwareRevision, version);
   }
 
   dispose(): void {
