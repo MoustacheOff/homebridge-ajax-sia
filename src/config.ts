@@ -3,8 +3,10 @@ import type { Protocol } from './sia/server.js';
 
 export { DEFAULT_DEVICE_MODEL, DEFAULT_DEVICE_OS };
 
-export const ZONE_TYPES = ['motion', 'contact', 'smoke', 'leak', 'co'] as const;
+export const ZONE_TYPES = ['motion', 'contact', 'smoke', 'leak', 'co', 'siren', 'remote'] as const;
 export type ZoneType = typeof ZONE_TYPES[number];
+/** Types that detect nothing: the device is shown for its battery, tamper and connection only. */
+export const STATUS_TYPES: readonly ZoneType[] = ['siren', 'remote'];
 
 /** What HomeKit shows in an accessory's information page. All optional: the Ajax app has the real values. */
 export interface AccessoryInfo {
@@ -37,6 +39,8 @@ export interface CloudConfig {
   discoverDevices: boolean;
   /** Add a temperature sensor to the detectors that measure it. */
   temperatureSensors: boolean;
+  /** Expose the sirens and keyfobs of the Ajax account too, for their battery, tamper and connection. */
+  statusDevices: boolean;
   /** Keep a connection open to the Ajax account, as the Ajax app does, to learn of changes as they happen. */
   liveUpdates: boolean;
   /** Show the firmware the hub runs, read from the Ajax account, unless the user typed one. */
@@ -297,6 +301,7 @@ function parseCloud(value: unknown, errors: string[]): CloudConfig | undefined {
     syncIntervalMinutes: validInterval ? (syncInterval as number) : DEFAULT_SYNC_MINUTES,
     discoverDevices: flag('discoverDevices'),
     temperatureSensors: flag('temperatureSensors'),
+    statusDevices: flag('statusDevices'),
     liveUpdates: flag('liveUpdates'),
     hubFirmware: flag('hubFirmware'),
     ...(text('htsHost') ? { htsHost: text('htsHost') as string } : {}),

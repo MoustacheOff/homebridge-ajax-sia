@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Added
+
+- The sirens and keyfobs of the Ajax account (StreetSiren, HomeSiren, SpaceControl, button and the like) are exposed in HomeKit for their **battery**, **tamper** and **connection** (`cloud.statusDevices`, on by default, and it needs `cloud.discoverDevices`). They detect nothing and HomeKit has no siren or keyfob tile, so each shows as a contact sensor that always reads closed; Apple Home flags it as "No Response" when it is offline. They also react to the hub's SIA events for their zone (lid open, battery low, connection lost). The new device types `siren` and `remote` can be used under `devices` as well.
+
 ## [1.4.0] - 2026-11-16
 
 ### Added

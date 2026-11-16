@@ -201,6 +201,7 @@ describe('AjaxSiaPlatform with the devices of the Ajax account', () => {
   const MOTION = 2;
   const DOOR = 4;
   const SIREN = 31;
+  const SPACE_CONTROL = 25;
   const HUB = 114;
   const named = (registered: { displayName: string }[]) => registered.map((accessory) => accessory.displayName);
   const devicesRead = () => cloud.calls.filter((call) => call.path.endsWith(STREAM)).length;
@@ -241,7 +242,7 @@ describe('AjaxSiaPlatform with the devices of the Ajax account', () => {
     expect(cloud.calls.filter((call) => call.path.endsWith('LoginByPasswordService/execute'))).toHaveLength(1);
   });
 
-  it('exposes the detectors the user did not list, and nothing else', async () => {
+  it('exposes the detectors the user did not list, and the sirens, but not the hub or what it does not know', async () => {
     handlers[STREAM] = () => ({
       stream: [snapshot(
         hubDevice({ name: 'Hub 2 (4G)', index: 0, type: HUB }),
@@ -253,10 +254,49 @@ describe('AjaxSiaPlatform with the devices of the Ajax account', () => {
       )],
     });
     const { registered, messages } = await launch();
-    await vi.waitFor(() => expect(named(registered).length).toBe(4));
+    await vi.waitFor(() => expect(named(registered).length).toBe(5));
 
-    expect(named(registered).sort()).toEqual(['Ajax', 'DoorProtect Plus', 'MotionProtect Plus 2', 'MotionProtect Plus 3']);
+    expect(named(registered).sort()).toEqual(['Ajax', 'DoorProtect Plus', 'MotionProtect Plus 2', 'MotionProtect Plus 3', 'StreetSiren']);
     expect(messages.info.some((line) => line.includes('Found MotionProtect Plus (zone 2)'))).toBe(true);
+    expect(messages.info).toContain('Read 6 devices from your Ajax account (3 detectors, 1 sirens and keyfobs)');
+  });
+
+  it('shows a siren for its battery, tamper and connection, as a contact sensor that always reads closed', async () => {
+    handlers[STREAM] = () => ({
+      stream: [snapshot(hubDevice({ id: 'S1', name: 'Indoor siren', index: 6, type: SIREN, states: [9], statuses: [battery(1, 64)] }))],
+    });
+    const { registered, port } = await launch();
+    await vi.waitFor(() => expect(named(registered)).toContain('Indoor siren'));
+    const siren = registered.find((accessory) => accessory.displayName === 'Indoor siren')!;
+    const sensor = siren.getService(Service.ContactSensor)!;
+    await vi.waitFor(() => expect(sensor.getCharacteristic(Characteristic.StatusFault).value).toBe(1));
+    expect(sensor.getCharacteristic(Characteristic.ContactSensorState).value).toBe(Characteristic.ContactSensorState.CONTACT_DETECTED);
+    expect(level(siren)).toBe(64);
+
+    // An alarm number that happens to match its zone must not make it read open.
+    await hubSends(port, 'Nri1/BA6');
+    expect(sensor.getCharacteristic(Characteristic.ContactSensorState).value).toBe(Characteristic.ContactSensorState.CONTACT_DETECTED);
+    await hubSends(port, 'Nri1/TA6');
+    expect(sensor.getCharacteristic(Characteristic.StatusTampered).value).toBe(1);
+  });
+
+  it('adds no siren or keyfob when the user turned them off', async () => {
+    handlers[STREAM] = () => ({
+      stream: [snapshot(
+        hubDevice({ name: 'DoorProtect Plus', index: 1, type: DOOR }),
+        hubDevice({ name: 'StreetSiren', index: 5, type: SIREN }),
+        hubDevice({ name: 'SpaceControl', index: 7, type: SPACE_CONTROL }),
+      )],
+    });
+    const { registered } = await launch({ statusDevices: false });
+    await vi.waitFor(() => expect(named(registered)).toContain('DoorProtect Plus'));
+    expect(named(registered).sort()).toEqual(['Ajax', 'DoorProtect Plus']);
+  });
+
+  it('shows a keyfob too', async () => {
+    handlers[STREAM] = () => ({ stream: [snapshot(hubDevice({ name: 'SpaceControl', index: 7, type: SPACE_CONTROL }))] });
+    const { registered } = await launch();
+    await vi.waitFor(() => expect(named(registered)).toContain('SpaceControl'));
   });
 
   it('makes the discovered detectors react to what the hub reports', async () => {

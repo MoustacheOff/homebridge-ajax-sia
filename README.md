@@ -110,7 +110,7 @@ Use the Homebridge UI, or add a platform to `config.json`:
 | `listenAddress` | `0.0.0.0` | Interface to bind to. |
 | `encryptionKey` | none | AES key shared with the hub. When set, **unencrypted messages are refused**. |
 | `encryptionKeyFormat` | `ascii` | `ascii` for a 16, 24 or 32 character key; `hex` if you entered the key as 32, 48 or 64 hex digits. |
-| `devices` | `[]` | Detectors to expose: `zone`, `name`, `type` (`motion`, `contact`, `smoke`, `leak`, `co`), and optionally `model`, `serial`, `firmware`. |
+| `devices` | `[]` | Detectors to expose: `zone`, `name`, `type` (`motion`, `contact`, `smoke`, `leak`, `co`, and `siren` or `remote` for a device that only reports its state), and optionally `model`, `serial`, `firmware`. |
 | `hub` | `{}` | What HomeKit shows for the alarm: optional `model`, `serial`, `firmware`. |
 | `areas` | `1` | Number of Ajax groups. With several, the alarm reads **Home** until all are armed. |
 | `motionResetSeconds` | `30` | How long a motion stays visible in HomeKit. |
@@ -216,7 +216,8 @@ SIA only listens. To arm, disarm and switch to night mode from Apple Home, and t
 | `spaceName` | none | Needed only when the account has several spaces. The log lists them. |
 | `spaceId` | none | Alternative to `spaceName`. |
 | `syncIntervalMinutes` | `60` | How often to read the real state and the devices. `0` reads only at startup and after a command. |
-| `discoverDevices` | `true` | Expose the motion, door, smoke and leak detectors of the account that are not under `devices`. Sirens, keyfobs, keypads and the hub are not exposed. A detector that leaves the account is removed. |
+| `discoverDevices` | `true` | Expose the motion, door, smoke and leak detectors of the account that are not under `devices`. Keypads and the hub are not exposed. A detector that leaves the account is removed. |
+| `statusDevices` | `true` | Also expose the sirens and keyfobs of the account, for their battery, tamper and connection (`StatusFault`: "No Response" in Apple Home). They detect nothing, and HomeKit has no siren or keyfob tile, so each shows as a contact sensor that always reads closed. Needs `discoverDevices`. |
 | `temperatureSensors` | `true` | Add a temperature sensor to the detectors that report one. |
 | `hubFirmware` | `true` | Read the firmware the hub runs from the account, once a day, and show it in HomeKit. Ignored when `hub.firmware` is set. Only used when the account is set. |
 | `liveUpdates` | `true` | Keep a connection open to the account to follow the detectors live. Only used when the account is set. Turn it off to read them only every `syncIntervalMinutes`. |

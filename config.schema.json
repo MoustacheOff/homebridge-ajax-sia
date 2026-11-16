@@ -139,6 +139,18 @@
                   "enum": [
                     "co"
                   ]
+                },
+                {
+                  "title": "Siren (battery, tamper and connection only)",
+                  "enum": [
+                    "siren"
+                  ]
+                },
+                {
+                  "title": "Keyfob (battery, tamper and connection only)",
+                  "enum": [
+                    "remote"
+                  ]
                 }
               ]
             },
@@ -268,6 +280,15 @@
             "type": "boolean",
             "default": true,
             "description": "Expose the motion, door, smoke and leak detectors of your Ajax account that are not listed under Detectors, with the name Ajax gives them. A detector listed above always keeps your own name.",
+            "condition": {
+              "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
+            }
+          },
+          "statusDevices": {
+            "title": "Show sirens and keyfobs",
+            "type": "boolean",
+            "default": true,
+            "description": "Expose the sirens and keyfobs of your Ajax account too, for their battery, tamper and connection. They detect nothing, so Apple Home shows each as a contact sensor that always reads closed. Only applies with Discover detectors on.",
             "condition": {
               "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
             }
@@ -404,6 +425,7 @@
         "cloud.spaceName",
         "cloud.syncIntervalMinutes",
         "cloud.discoverDevices",
+        "cloud.statusDevices",
         "cloud.temperatureSensors",
         "cloud.liveUpdates",
         "cloud.hubFirmware",

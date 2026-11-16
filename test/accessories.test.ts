@@ -161,6 +161,21 @@ describe('ZoneAccessory', () => {
     expect(read(accessory, Service.MotionSensor, Characteristic.StatusActive)).toBe(1);
   });
 
+  it.each(['siren', 'remote'] as const)('shows a %s for its battery, tamper and connection, never as open', (type) => {
+    const { model, zone } = setup();
+    const { accessory } = zone({ zone: 6, name: 'Device', type });
+    const closed = Characteristic.ContactSensorState.CONTACT_DETECTED;
+    expect(read(accessory, Service.ContactSensor, Characteristic.ContactSensorState)).toBe(closed);
+    model.apply({ code: 'BA', zone: 6 });
+    expect(read(accessory, Service.ContactSensor, Characteristic.ContactSensorState)).toBe(closed);
+    model.apply({ code: 'XL', zone: 6 });
+    model.apply({ code: 'TA', zone: 6 });
+    model.apply({ code: 'XT', zone: 6 });
+    expect(read(accessory, Service.ContactSensor, Characteristic.StatusFault)).toBe(1);
+    expect(read(accessory, Service.ContactSensor, Characteristic.StatusTampered)).toBe(1);
+    expect(read(accessory, Service.ContactSensor, Characteristic.StatusLowBattery)).toBe(1);
+  });
+
   describe('motion reset', () => {
     const motion = (accessory: PlatformAccessory) => read(accessory, Service.MotionSensor, Characteristic.MotionDetected);
 

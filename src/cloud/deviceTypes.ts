@@ -76,9 +76,14 @@ const KINDS: [RegExp, ZoneType][] = [
   [/^(door_protect|glass_protect|seismo_protect)/, 'contact'],
   [/^fire_protect/, 'smoke'],
   [/^leak_protect/, 'leak'],
+  [/siren/, 'siren'],
+  [/^(space_control|button|double_button)/, 'remote'],
 ];
 
-/** The kind of HomeKit sensor a family is exposed as, when there is one: sirens, keypads, hubs and so on are not. */
+/**
+ * The kind of HomeKit sensor a family is exposed as, when there is one: keypads, hubs and so on are not.
+ * Sirens and keyfobs only report their state.
+ */
 export function sensorKind(family: string | undefined): ZoneType | undefined {
   return family ? KINDS.find(([pattern]) => pattern.test(family))?.[1] : undefined;
 }

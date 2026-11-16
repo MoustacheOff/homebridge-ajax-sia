@@ -156,11 +156,11 @@ describe('device families', () => {
     ['glass_protect', 'contact'],
     ['fire_protect_two_hsc_ac', 'smoke'],
     ['leak_protect', 'leak'],
-    ['home_siren', undefined],
-    ['street_siren_double_deck', undefined],
+    ['home_siren', 'siren'],
+    ['street_siren_double_deck', 'siren'],
     ['keypad_plus', undefined],
     ['hub_two_4g', undefined],
-    ['space_control', undefined],
+    ['space_control', 'remote'],
     [undefined, undefined],
   ])('exposes %s as %s', (family, kind) => {
     expect(sensorKind(family)).toBe(kind);

@@ -25,7 +25,8 @@ interface Binding {
   service: ServiceClass;
   characteristic: CharacteristicClass;
   /** Which alarm family of the model drives this sensor. */
-  source: 'intrusion' | 'fire' | 'water' | 'gas';
+  /** What the zone's state raises. Unset for a device that detects nothing (a siren, a keyfob). */
+  source?: 'intrusion' | 'fire' | 'water' | 'gas';
   /** Value of the characteristic for (triggered, idle). */
   values: [triggered: number, idle: number];
 }
@@ -36,6 +37,8 @@ const DEFAULT_MODEL: Record<ZoneType, string> = {
   smoke: 'Smoke detector',
   leak: 'Leak detector',
   co: 'Carbon monoxide detector',
+  siren: 'Siren',
+  remote: 'Keyfob',
 };
 
 /** A detector, exposed as the closest HomeKit sensor. */
@@ -188,12 +191,21 @@ export class ZoneAccessory {
         return { service: S.LeakSensor, characteristic: C.LeakDetected, source: 'water', values: [1, 0] };
       case 'co':
         return { service: S.CarbonMonoxideSensor, characteristic: C.CarbonMonoxideDetected, source: 'gas', values: [1, 0] };
+      case 'siren':
+      case 'remote':
+        // No HomeKit service fits a siren or a keyfob: a contact sensor that always reads closed carries their battery,
+        // tamper and "no response" states.
+        return {
+          service: S.ContactSensor,
+          characteristic: C.ContactSensorState,
+          values: [C.ContactSensorState.CONTACT_NOT_DETECTED, C.ContactSensorState.CONTACT_DETECTED],
+        };
     }
   }
 
   private onChange(state: ZoneState): void {
     this.state = state;
-    if (!state[this.binding.source]) {
+    if (!this.binding.source || !state[this.binding.source]) {
       clearTimeout(this.resetTimer);
       this.motionExpired = false;
     }
@@ -216,7 +228,7 @@ export class ZoneAccessory {
 
   private detection(): number {
     const [triggered, idle] = this.binding.values;
-    const active = this.state[this.binding.source] && !this.motionExpired;
+    const active = this.binding.source !== undefined && this.state[this.binding.source] && !this.motionExpired;
     return active ? triggered : idle;
   }
 

@@ -65,7 +65,7 @@ describe('parseConfig', () => {
       [{ zone: 0, name: 'Hub', type: 'motion' }, /zone/],
       [{ zone: 1.5, name: 'x', type: 'motion' }, /zone/],
       [{ zone: 1, name: '', type: 'motion' }, /name/],
-      [{ zone: 1, name: 'x', type: 'siren' }, /type/],
+      [{ zone: 1, name: 'x', type: 'doorbell' }, /type/],
     ])('rejects %j', (device, message) => {
       expect(parseConfig({ ...valid, devices: [device] }).errors).toEqual([expect.stringMatching(message)]);
     });
@@ -123,16 +123,20 @@ describe('parseConfig cloud', () => {
       syncIntervalMinutes: 60,
       discoverDevices: true,
       temperatureSensors: true,
+      statusDevices: true,
       liveUpdates: true,
       hubFirmware: true,
     });
   });
 
-  it.each(['discoverDevices', 'temperatureSensors', 'liveUpdates', 'hubFirmware'])('lets the user turn %s off', (field) => {
-    expect(parseConfig({ ...valid, cloud: { ...cloud, [field]: false } }).config?.cloud).toMatchObject({ [field]: false });
-  });
+  it.each(['discoverDevices', 'temperatureSensors', 'statusDevices', 'liveUpdates', 'hubFirmware'])(
+    'lets the user turn %s off',
+    (field) => {
+      expect(parseConfig({ ...valid, cloud: { ...cloud, [field]: false } }).config?.cloud).toMatchObject({ [field]: false });
+    },
+  );
 
-  it.each(['discoverDevices', 'temperatureSensors'])('refuses a %s that is not true or false', (field) => {
+  it.each(['discoverDevices', 'temperatureSensors', 'statusDevices'])('refuses a %s that is not true or false', (field) => {
     expect(parseConfig({ ...valid, cloud: { ...cloud, [field]: 'no' } }).errors).toEqual([`"cloud.${field}" must be true or false`]);
   });
 

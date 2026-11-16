@@ -10,7 +10,7 @@ import { sensorKind } from './cloud/deviceTypes.js';
 import { GrpcChannel } from './cloud/grpc.js';
 import { readHubFirmware } from './cloud/hts.js';
 import { CloudStore } from './cloud/store.js';
-import { parseConfig, type Config } from './config.js';
+import { parseConfig, STATUS_TYPES, type Config } from './config.js';
 import { describeCode } from './sia/codes.js';
 import { SiaReceiver } from './sia/receiver.js';
 import { SiaServer } from './sia/server.js';
@@ -386,6 +386,9 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
         if (!discovered || wanted.has(accessory.UUID) || !zone || !type) {
           continue;
         }
+        if (STATUS_TYPES.includes(type) && !config.cloud.statusDevices) {
+          continue; // Left out of `wanted`: removed below, as the option was turned off.
+        }
         wanted.add(accessory.UUID);
         const device = { zone, type, name: accessory.displayName };
         this.addZone(new ZoneAccessory(this.api, accessory, device, model, config.motionResetSeconds, { temperature }));
@@ -414,8 +417,11 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
     const { hap } = this.api;
     if (!this.devicesRead) {
       this.devicesRead = true;
-      const sensors = devices.filter((device) => sensorKind(device.family)).length;
-      this.log.info(`Read ${devices.length} devices from your Ajax account (${sensors} detectors)`);
+      const kinds = devices.map((device) => sensorKind(device.family));
+      const detectors = kinds.filter((kind) => kind && !STATUS_TYPES.includes(kind)).length;
+      const others = kinds.filter((kind) => kind && STATUS_TYPES.includes(kind)).length;
+      const extra = others > 0 ? `, ${others} sirens and keyfobs` : '';
+      this.log.info(`Read ${devices.length} devices from your Ajax account (${detectors} detectors${extra})`);
     }
     const listed = new Set<number>();
     const names = new Map<string, number>();
@@ -435,7 +441,7 @@ export class AjaxSiaPlatform implements DynamicPlatformPlugin {
         continue;
       }
       const type = sensorKind(device.family);
-      if (!settings?.discoverDevices || !type) {
+      if (!settings?.discoverDevices || !type || (STATUS_TYPES.includes(type) && !settings.statusDevices)) {
         continue;
       }
 
