@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-16
+
 ### Added
 
 - A detector that reports a failure, a dirty smoke chamber or a faulty CO sensor (`FT`, `FS`, `GS`) shows as faulty in HomeKit until the matching restore (`FJ`, `GX`), without needing the Ajax account. It is a fault, never an alarm.
@@ -131,7 +133,8 @@ First release.
   - The plugin names itself `Homebridge`, with the operating system it runs on (read from the machine, for example `Debian GNU/Linux bookworm 12.15 aarch64` or `macOS 27.0.1`), in the list of sessions of the Ajax account, and renames its session when that name changes.
 - `scripts/probe.mjs`, a read-only check of an Ajax account that ends its session when it exits.
 
-[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.4...v1.2.0
 [1.1.4]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.3...v1.1.4
