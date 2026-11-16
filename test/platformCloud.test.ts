@@ -375,10 +375,12 @@ describe('AjaxSiaPlatform following the devices live', () => {
   it('logs in again when Ajax says the session is no longer good', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
     try {
-      await launch({ liveUpdates: true }, undefined, { devices: detectors });
+      const { messages } = await launch({ liveUpdates: true }, undefined, { devices: detectors });
       await vi.waitFor(() => expect(cloud.open.length).toBe(1));
 
       cloud.endStreams(GrpcStatus.UNAUTHENTICATED, 'expired');
+      // Only once the loss is noticed is there a retry to wait for.
+      await vi.waitFor(() => expect(messages.warn.some((line) => line.includes('Lost the live link'))).toBe(true));
       await vi.advanceTimersByTimeAsync(5_000);
       await vi.waitFor(() => expect(streamsOpened()).toBe(2));
       expect(cloud.calls.filter((call) => call.path.endsWith('LoginByPasswordService/execute'))).toHaveLength(2);
