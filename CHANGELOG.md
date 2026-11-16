@@ -4,6 +4,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-16
+
 ### Added
 
 - Once the Ajax account is set up, the firmware the hub runs is read from it (`cloud.hubFirmware`, on by default, once a day) and shown in HomeKit, unless one is typed under `hub.firmware`. It comes from a second connection of the Ajax app, which this plugin opens only for that and closes right after. If it cannot be read, HomeKit keeps showing the version of the plugin.
@@ -120,7 +122,8 @@ First release.
   - The plugin names itself `Homebridge`, with the operating system it runs on (read from the machine, for example `Debian GNU/Linux bookworm 12.15 aarch64` or `macOS 27.0.1`), in the list of sessions of the Ajax account, and renames its session when that name changes.
 - `scripts/probe.mjs`, a read-only check of an Ajax account that ends its session when it exits.
 
-[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.4...v1.2.0
 [1.1.4]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/MoustacheOff/homebridge-ajax-sia/compare/v1.1.2...v1.1.3
