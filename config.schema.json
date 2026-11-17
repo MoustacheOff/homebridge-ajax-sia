@@ -287,8 +287,8 @@
           "statusDevices": {
             "title": "Show sirens and keyfobs",
             "type": "boolean",
-            "default": true,
-            "description": "Expose the sirens and keyfobs of your Ajax account too, for their battery, tamper and connection. They detect nothing, so Apple Home shows each as a contact sensor that always reads closed. Only applies with Discover detectors on.",
+            "default": false,
+            "description": "Expose the sirens and keyfobs of your Ajax account too, for their battery, tamper and connection. They detect nothing, so Apple Home shows each as a contact sensor that always reads closed. Off unless you turn it on. Only applies with Discover detectors on.",
             "condition": {
               "functionBody": "return !!model.cloud && !!model.cloud.enabled;"
             }

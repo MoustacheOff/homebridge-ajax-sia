@@ -253,7 +253,7 @@ describe('AjaxSiaPlatform with the devices of the Ajax account', () => {
         hubDevice({ name: 'Mystery', index: 6, type: 9999 }),
       )],
     });
-    const { registered, messages } = await launch();
+    const { registered, messages } = await launch({ statusDevices: true });
     await vi.waitFor(() => expect(named(registered).length).toBe(5));
 
     expect(named(registered).sort()).toEqual(['Ajax', 'DoorProtect Plus', 'MotionProtect Plus 2', 'MotionProtect Plus 3', 'StreetSiren']);
@@ -265,7 +265,7 @@ describe('AjaxSiaPlatform with the devices of the Ajax account', () => {
     handlers[STREAM] = () => ({
       stream: [snapshot(hubDevice({ id: 'S1', name: 'Indoor siren', index: 6, type: SIREN, states: [9], statuses: [battery(1, 64)] }))],
     });
-    const { registered, port } = await launch();
+    const { registered, port } = await launch({ statusDevices: true });
     await vi.waitFor(() => expect(named(registered)).toContain('Indoor siren'));
     const siren = registered.find((accessory) => accessory.displayName === 'Indoor siren')!;
     const sensor = siren.getService(Service.ContactSensor)!;
@@ -280,7 +280,7 @@ describe('AjaxSiaPlatform with the devices of the Ajax account', () => {
     expect(sensor.getCharacteristic(Characteristic.StatusTampered).value).toBe(1);
   });
 
-  it('adds no siren or keyfob when the user turned them off', async () => {
+  it('adds no siren or keyfob unless the user asked for them', async () => {
     handlers[STREAM] = () => ({
       stream: [snapshot(
         hubDevice({ name: 'DoorProtect Plus', index: 1, type: DOOR }),
@@ -288,14 +288,14 @@ describe('AjaxSiaPlatform with the devices of the Ajax account', () => {
         hubDevice({ name: 'SpaceControl', index: 7, type: SPACE_CONTROL }),
       )],
     });
-    const { registered } = await launch({ statusDevices: false });
+    const { registered } = await launch();
     await vi.waitFor(() => expect(named(registered)).toContain('DoorProtect Plus'));
     expect(named(registered).sort()).toEqual(['Ajax', 'DoorProtect Plus']);
   });
 
   it('shows a keyfob too', async () => {
     handlers[STREAM] = () => ({ stream: [snapshot(hubDevice({ name: 'SpaceControl', index: 7, type: SPACE_CONTROL }))] });
-    const { registered } = await launch();
+    const { registered } = await launch({ statusDevices: true });
     await vi.waitFor(() => expect(named(registered)).toContain('SpaceControl'));
   });
 

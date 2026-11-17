@@ -217,7 +217,7 @@ SIA only listens. To arm, disarm and switch to night mode from Apple Home, and t
 | `spaceId` | none | Alternative to `spaceName`. |
 | `syncIntervalMinutes` | `60` | How often to read the real state and the devices. `0` reads only at startup and after a command. |
 | `discoverDevices` | `true` | Expose the motion, door, smoke and leak detectors of the account that are not under `devices`. Keypads and the hub are not exposed. A detector that leaves the account is removed. |
-| `statusDevices` | `true` | Also expose the sirens and keyfobs of the account, for their battery, tamper and connection (`StatusFault`: "No Response" in Apple Home). They detect nothing, and HomeKit has no siren or keyfob tile, so each shows as a contact sensor that always reads closed. Needs `discoverDevices`. |
+| `statusDevices` | `false` | Also expose the sirens and keyfobs of the account, for their battery, tamper and connection (`StatusFault`: "No Response" in Apple Home). They detect nothing, and HomeKit has no siren or keyfob tile, so each shows as a contact sensor that always reads closed. Needs `discoverDevices`. |
 | `temperatureSensors` | `true` | Add a temperature sensor to the detectors that report one. |
 | `hubFirmware` | `true` | Read the firmware the hub runs from the account, once a day, and show it in HomeKit. Ignored when `hub.firmware` is set. Only used when the account is set. |
 | `liveUpdates` | `true` | Keep a connection open to the account to follow the detectors live. Only used when the account is set. Turn it off to read them only every `syncIntervalMinutes`. |

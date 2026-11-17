@@ -39,7 +39,7 @@ export interface CloudConfig {
   discoverDevices: boolean;
   /** Add a temperature sensor to the detectors that measure it. */
   temperatureSensors: boolean;
-  /** Expose the sirens and keyfobs of the Ajax account too, for their battery, tamper and connection. */
+  /** Expose the sirens and keyfobs of the Ajax account too, for their battery, tamper and connection. Off unless asked for. */
   statusDevices: boolean;
   /** Keep a connection open to the Ajax account, as the Ajax app does, to learn of changes as they happen. */
   liveUpdates: boolean;
@@ -270,14 +270,14 @@ function parseCloud(value: unknown, errors: string[]): CloudConfig | undefined {
     }
   }
 
-  const flag = (field: string): boolean => {
+  const flag = (field: string, fallback = true): boolean => {
     const entry = raw[field];
     if (entry === undefined) {
-      return true;
+      return fallback;
     }
     if (typeof entry !== 'boolean') {
       errors.push(`"cloud.${field}" must be true or false`);
-      return true;
+      return fallback;
     }
     return entry;
   };
@@ -301,7 +301,7 @@ function parseCloud(value: unknown, errors: string[]): CloudConfig | undefined {
     syncIntervalMinutes: validInterval ? (syncInterval as number) : DEFAULT_SYNC_MINUTES,
     discoverDevices: flag('discoverDevices'),
     temperatureSensors: flag('temperatureSensors'),
-    statusDevices: flag('statusDevices'),
+    statusDevices: flag('statusDevices', false),
     liveUpdates: flag('liveUpdates'),
     hubFirmware: flag('hubFirmware'),
     ...(text('htsHost') ? { htsHost: text('htsHost') as string } : {}),
