@@ -14,7 +14,7 @@ For security issues, see [SECURITY.md](SECURITY.md) instead of opening a public 
 
 ## Development
 
-You need Node.js 22, 24 or 26.
+You need Node.js 22, 24 or 26 (22 is planned to be dropped in the next major version, after its end of life on 30 April 2027).
 
 ```sh
 npm install

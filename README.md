@@ -51,7 +51,7 @@ With direct SIA, the hub sends its events to your server instead of an alarm rec
 
 ## Requirements
 
-- Homebridge 1.8 or 2.x, Node.js 22, 24 or 26
+- Homebridge 1.8 or 2.x, Node.js 22, 24 or 26. Node.js 22 reaches its end of life on 30 April 2027 and is planned to be dropped in the next major version, so prefer 24 or 26 (26 is the current LTS)
 - An Ajax hub with firmware **OS Malevich 2.7 or later** (Hub 2, Hub 2 Plus, Hub 2 (4G) and other recent hubs)
 - The hub must be able to reach the Homebridge server on your network
 - No runtime dependency: the plugin only uses Node.js built-ins
